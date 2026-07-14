@@ -1,0 +1,27 @@
+{% load unfold %}
+
+<div class="bg-white border-b border-base-200 mb-4 px-4 z-40 dark:bg-base-900 dark:border-base-800 dark:text-font-default-dark {% element_classes 'header' %}">
+    <div class="{% if not cl.model_admin.list_fullwidth and is_fullwidth != "1" %}container{% endif %} flex items-center h-16 mx-auto py-4 {% element_classes 'header_inner' %}">
+        <div id="header-inner" class="flex items-center relative w-full">
+            <div class="flex items-center w-full">
+                {# 回首頁：置於頁首列，靜態排版（非浮動），不會遮住底部儲存等按鈕 #}
+                <a href="{% url 'go_home' %}?from={{ request.get_full_path|urlencode }}"
+                   style="flex:0 0 auto; margin-right:16px; white-space:nowrap;
+                          background:#b3894e; color:#fff; padding:7px 13px; border-radius:8px;
+                          font-size:13px; font-weight:700; text-decoration:none;">🏠 回首頁</a>
+
+                {% block usertools %}
+                    {% if has_permission %}
+                        {% block welcome-msg %}
+                            {% include 'unfold/helpers/welcomemsg.html' %}
+                        {% endblock %}
+
+                        {% block userlinks %}
+                            {% include 'unfold/helpers/userlinks.html' %}
+                        {% endblock %}
+                    {% endif %}
+                {% endblock %}
+            </div>
+        </div>
+    </div>
+</div>

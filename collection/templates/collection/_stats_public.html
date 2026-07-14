@@ -1,0 +1,30 @@
+{# 公開統計內容（大眾版與館方版共用） #}
+<div class="stat-grid">
+  <div class="stat-card"><div class="num">{{ species_total }}</div><div class="lbl">物種總數</div></div>
+  <div class="stat-card"><div class="num">{{ specimen_total }}</div><div class="lbl">標本總數</div></div>
+  <div class="stat-card"><div class="num">{{ observation_total }}</div><div class="lbl">觀察紀錄總數</div></div>
+</div>
+
+<h2 class="sec">各分類群（物種數 / 標本數）</h2>
+<div class="stat-grid">
+  {% for g in groups %}
+    <div class="stat-card">
+      <div style="font-weight:700; color:var(--navy-ink); margin-bottom:8px;">{{ g.label }}</div>
+      <div class="stat-row"><span class="muted">物種</span>
+        {% if g.species_link %}<a href="{{ g.species_link }}"><strong>{{ g.species }}</strong> →</a>{% else %}<strong>{{ g.species }}</strong>{% endif %}</div>
+      <div class="stat-row"><span class="muted">標本</span>
+        {% if g.specimen_link %}<a href="{{ g.specimen_link }}"><strong>{{ g.specimens }}</strong> →</a>{% else %}<strong>{{ g.specimens }}</strong>{% endif %}</div>
+    </div>
+  {% endfor %}
+</div>
+
+<h2 class="sec">保育等級分布（物種數）</h2>
+<div class="stat-grid">
+  {% for c in conservation %}
+    <div class="stat-card">
+      <span class="tag cons-{{ c.value }}">{{ c.label }}</span>
+      <div class="num" style="font-size:24px; margin-top:10px;">{{ c.species }}</div>
+      <div class="lbl">種</div>
+    </div>
+  {% endfor %}
+</div>

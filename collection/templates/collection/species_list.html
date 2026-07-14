@@ -1,0 +1,85 @@
+{% extends "collection/base_public.html" %}
+
+{% block title %}查詢典藏 · 蘭陽博物館 飛行生物典藏{% endblock %}
+
+{% block content %}
+  <a class="backlink" href="{% url 'home' %}">← 回首頁</a>
+  <h1>查詢典藏</h1>
+  <p class="lead">可依學名或中文名搜尋，並以分類群、保育等級篩選。</p>
+
+  <div class="panel">
+    <form class="search-form" method="get">
+      <div class="field">
+        <label>搜尋（學名／中文名）</label>
+        <input type="text" name="q" value="{{ q }}" placeholder="例如 Egretta 或 小白鷺" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>分類群</label>
+        <select name="taxon_group">
+          <option value="">全部</option>
+          {% for value, label in taxon_groups %}
+            <option value="{{ value }}" {% if value == group %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>保育等級</label>
+        <select name="conservation_status">
+          <option value="">全部</option>
+          {% for value, label in conservation_choices %}
+            <option value="{{ value }}" {% if value == status %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn navy" type="submit">查詢</button>
+    </form>
+  </div>
+
+  {% if species_list %}
+    <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-bottom:12px;">
+      <p class="muted" style="margin:0;">
+        {% if searched %}共 {{ total }} 筆結果{% else %}尚未輸入查詢條件，以下顯示全部 {{ total }} 筆物種{% endif %}
+      </p>
+      <a class="btn navy" style="padding:8px 16px; font-size:14px;"
+         href="{% url 'public_species_export' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}">
+        ⬇ 匯出查詢結果 CSV</a>
+    </div>
+    <div class="species-grid">
+      {% for s in species_list %}
+        <a class="panel species-card" href="{% url 'public_species_detail' s.pk %}">
+          <div class="cn">{{ s.common_name|default:"（無中文名）" }}</div>
+          <div class="sci">{{ s.scientific_name }}</div>
+          <div class="tags">
+            <span class="tag grp">{{ s.get_taxon_group_display }}</span>
+            <span class="tag cons-{{ s.conservation_status }}">{{ s.get_conservation_status_display }}</span>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+
+  {% elif db_empty %}
+    <!-- 空系統：尚無任何典藏資料 -->
+    <div class="panel empty-state">
+      <div class="ico">🕊️</div>
+      <div class="t">目前尚無典藏資料</div>
+      <p class="muted" style="max-width:520px; margin:0 auto;">
+        本系統的典藏資料正在建置中，敬請期待。</p>
+    </div>
+
+  {% else %}
+    <!-- 有查詢條件卻查無結果：友善訊息 + 外部查詢引導 -->
+    <div class="panel empty-state">
+      <div class="ico">🔎</div>
+      <div class="t">本館典藏中查無此物種</div>
+      <p class="muted" style="max-width:540px; margin:0 auto 18px;">
+        你可以到以下權威資料庫查詢（將在新分頁開啟 ↗）：</p>
+      <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center;">
+        {% for link in no_result_links %}
+          <a class="btn navy" href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.label }} ↗</a>
+        {% endfor %}
+      </div>
+      <p class="muted" style="font-size:11px; margin:16px 0 0;">
+        外部網站由各機構維護，與本館典藏各自獨立。</p>
+    </div>
+  {% endif %}
+{% endblock %}

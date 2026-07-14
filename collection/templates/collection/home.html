@@ -1,0 +1,43 @@
+{% extends "collection/base_public.html" %}
+{% load static %}
+
+{% block body %}
+{# 特展主視覺版位：把圖片放到 collection/static/collection/img/hero.jpg 即會顯示；
+   未放圖時 url 失效，會自動降級為下方深藍罩＋底色。半透明深藍罩確保文字清楚。 #}
+<section class="hero" style="background-image:
+    radial-gradient(900px 500px at 80% -10%, rgba(176,134,67,.22), transparent 60%),
+    linear-gradient(160deg, rgba(18,32,58,.80), rgba(20,34,60,.72)),
+    url('{% static 'collection/img/hero.jpg' %}');">
+  <div class="hero-inner">
+    <div class="eyebrow">LANYANG MUSEUM · FLYING FAUNA</div>
+    <h1>飛行生物特展</h1>
+    <p class="sub">翱翔於蘭陽平原的鳥類、昆蟲、蝙蝠與飛鼠——探索博物館典藏中的飛行生命。</p>
+    <a class="btn" href="{% url 'public_species_list' %}">開始查詢典藏</a>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="entry-cards">
+    <a class="panel entry-card" href="{% url 'public_species_list' %}">
+      <div class="ico">🔍</div>
+      <div class="t">查詢典藏</div>
+      <div class="muted" style="font-size:14px;">依學名、中文名搜尋物種與標本</div>
+    </a>
+    <a class="panel entry-card" href="{% url 'public_stats' %}">
+      <div class="ico">📊</div>
+      <div class="t">館藏統計</div>
+      <div class="muted" style="font-size:14px;">公開館藏數據總覽（免登入）</div>
+    </a>
+  </div>
+
+  <!-- 館員專用：做小、視覺區隔 -->
+  <a class="staff-bar" href="/admin/">
+    <span style="font-size:22px; color:var(--gold);">✏️</span>
+    <span style="font-size:14px;">
+      <strong style="color:var(--navy-ink);">登錄資料</strong>
+      <span class="tag" style="background:var(--navy); color:#f4efe4; margin-left:6px;">限館員</span>
+      　館員專用入口，需登入後台建檔與管理。</span>
+    <span class="arrow">前往 /admin →</span>
+  </a>
+</div>
+{% endblock %}

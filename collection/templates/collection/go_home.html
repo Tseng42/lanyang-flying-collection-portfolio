@@ -1,0 +1,21 @@
+{% extends "collection/base_public.html" %}
+
+{% block title %}回首頁 · 蘭陽博物館 飛行生物典藏{% endblock %}
+
+{% block content %}
+  <div class="panel" style="max-width:460px; margin:40px auto; text-align:center;">
+    <div style="font-size:40px;">🏠</div>
+    <h1 style="font-size:22px; margin:8px 0 4px;">要順便登出帳號嗎？</h1>
+    <p class="muted" style="margin:0 0 22px;">你目前為登入狀態。</p>
+
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <form method="post" action="{% url 'go_home_logout' %}">
+        {% csrf_token %}
+        <button class="btn navy" type="submit" style="width:100%;">登出並回首頁</button>
+      </form>
+      <a class="btn" href="{% url 'home' %}">保持登入、回首頁</a>
+      <a class="btn" href="{{ from_url }}"
+         style="background:#e7e0d2; color:var(--ink);">取消（留在原頁）</a>
+    </div>
+  </div>
+{% endblock %}

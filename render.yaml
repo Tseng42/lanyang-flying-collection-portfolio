@@ -1,0 +1,30 @@
+# Render Blueprint —— 在 Render 建立服務時可直接讀取此檔（Infrastructure as Code）。
+# 說明：定義一個 Python Web 服務，用 build.sh 建置、gunicorn 啟動。
+services:
+  - type: web
+    name: lymuseum
+    runtime: python
+    plan: free                       # Demo 用免費方案（注意：磁碟為暫時性，見 README 資料庫說明）
+    buildCommand: "bash build.sh"     # 見 build.sh：安裝、collectstatic、migrate
+    startCommand: "gunicorn lymuseum.wsgi:application"
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true           # 由 Render 自動產生安全密鑰（免手動貼）
+      - key: DJANGO_DEBUG
+        value: "False"                # 正式環境關閉除錯
+      - key: DJANGO_HTTPS
+        value: "True"                 # Render 提供 HTTPS，啟用 SSL 轉址與 secure cookie
+      - key: PYTHON_VERSION
+        value: "3.12.10"
+      - key: DATABASE_URL             # 自動連結下方資料庫，注入連線字串
+        fromDatabase:
+          name: lymuseum-db
+          property: connectionString
+    # 註：ALLOWED_HOSTS 不需手動設定，settings.py 會自動納入 Render 的 RENDER_EXTERNAL_HOSTNAME。
+
+# PostgreSQL 資料庫（Blueprint 會自動建立並連結到上方服務）
+databases:
+  - name: lymuseum-db
+    plan: free
+    databaseName: lymuseum
+    user: lymuseum

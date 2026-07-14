@@ -1,0 +1,55 @@
+{% extends "collection/base_public.html" %}
+
+{% block title %}館方統計 · 蘭陽博物館 飛行生物典藏{% endblock %}
+
+{% block content %}
+  <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;">
+    <a class="backlink" href="{% url 'home' %}" style="margin:0;">← 回首頁</a>
+    <a class="btn navy" style="padding:9px 18px;" href="/admin/">✏️ 前往登錄資料</a>
+  </div>
+  <h1 style="margin-top:12px;">館方統計 <span class="tag" style="background:var(--navy); color:#f4efe4;">內部</span></h1>
+  <p class="lead">含內部管理數據，僅供館方人員檢視。點擊關鍵數字可跳至篩選後的資料清單。</p>
+
+  {% include "collection/_stats_public.html" %}
+
+  <h2 class="sec">內部管理數據</h2>
+  <div class="stat-grid">
+    <a class="stat-card warn" href="{{ hazard_link }}" style="display:block; text-decoration:none;">
+      <div class="num">{{ hazard_total }} →</div>
+      <div class="lbl">含危害標記標本</div>
+      <div class="muted" style="font-size:12px; margin-top:4px;">
+        砷 {{ hazard_as }}／汞 {{ hazard_hg }}／其他 {{ hazard_other }}</div>
+    </a>
+    <a class="stat-card" href="{{ incomplete_link }}" style="display:block; text-decoration:none;">
+      <div class="num">{{ incomplete }} →</div>
+      <div class="lbl">待補完標本</div>
+      <div class="muted" style="font-size:12px; margin-top:4px;">缺鑑定者或採集日期</div>
+    </a>
+  </div>
+
+  <h2 class="sec">各標本狀態數量</h2>
+  <div class="stat-grid">
+    {% for s in statuses %}
+      <a class="stat-card" href="{{ s.link }}" style="display:block; text-decoration:none;">
+        <div class="num" style="font-size:24px;">{{ s.count }} →</div>
+        <div class="lbl">{{ s.label }}</div>
+      </a>
+    {% endfor %}
+  </div>
+
+  <h2 class="sec">最近登錄的 5 筆標本</h2>
+  <div class="panel">
+    {% for r in recent %}
+      <div style="display:flex; flex-wrap:wrap; gap:6px 14px; padding:9px 0; font-size:14px;
+           {% if not forloop.first %}border-top:1px solid var(--bd);{% endif %}">
+        <strong style="color:var(--navy-2); min-width:120px;">{{ r.catalog }}</strong>
+        <span class="sci" style="flex:1; min-width:140px;">{{ r.scientific }}{% if r.common %}（{{ r.common }}）{% endif %}</span>
+        <span class="muted" style="white-space:nowrap;">{{ r.created|date:"Y-m-d H:i" }}</span>
+      </div>
+    {% empty %}
+      <p class="muted" style="margin:0;">目前尚無標本資料。</p>
+    {% endfor %}
+  </div>
+
+  <p class="muted" style="margin-top:14px; font-size:12px;">※ 本頁僅顯示統計，不提供編輯功能。</p>
+{% endblock %}

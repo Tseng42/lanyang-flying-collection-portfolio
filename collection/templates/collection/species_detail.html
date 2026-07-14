@@ -1,0 +1,133 @@
+{% extends "collection/base_public.html" %}
+
+{% block title %}{{ species.common_name|default:species.scientific_name }} · 物種資料{% endblock %}
+
+{% block content %}
+  <a class="backlink" href="{% url 'public_species_list' %}">← 回查詢典藏</a>
+
+  <div class="detail-head">
+    <div style="flex:1; min-width:220px;">
+      <h1 style="margin-bottom:4px;">
+        {{ species.common_name|default:"（無中文名）" }}
+        {% if protected %}<span class="tag cons-{{ species.conservation_status }}">保育類</span>{% endif %}
+      </h1>
+      <p class="sci muted" style="margin:0;">{{ species.scientific_name }}</p>
+    </div>
+    <!-- 兩層檢視切換鈕 -->
+    <div class="view-toggle">
+      <button type="button" id="btn-simple" onclick="setView('simple')"
+        style="background:var(--gold); color:#fff;">簡易版</button>
+      <button type="button" id="btn-research" onclick="setView('research')"
+        style="background:#fbf7ee; color:var(--muted);">研究檢視</button>
+    </div>
+  </div>
+
+  <!-- Bento 方塊版面（兩種檢視共用的物種基本資料） -->
+  <div class="bento">
+    <!-- 物種介紹：淺色大方塊 -->
+    <div class="panel b-intro">
+      <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
+        <span class="tag grp">{{ species.get_taxon_group_display }}</span>
+        <span class="tag cons-{{ species.conservation_status }}">{{ species.get_conservation_status_display }}</span>
+        <span class="tag grp">IUCN：{{ species.get_iucn_status_display }}</span>
+      </div>
+      <div class="card-title">物種介紹</div>
+      <p class="intro-text">{{ species.introduction|default:"（本物種介紹尚待補充。）"|linebreaksbr }}</p>
+    </div>
+
+    <!-- 館藏標本數量：深藍強調方塊 -->
+    <div class="panel b-count card-navy">
+      <div class="k">館藏標本數量</div>
+      <div class="big">{{ specimen_count }}</div>
+      <div class="k">件</div>
+    </div>
+
+    <!-- 延伸查詢：外部權威資源 -->
+    <div class="panel b-ext" style="grid-column:span 6;">
+      <div class="card-title">延伸查詢</div>
+      <p class="muted" style="font-size:13px; margin:0 0 14px;">以下連結為外部網站，將在新分頁開啟 ↗</p>
+      <div class="ext-links">
+        {% for link in external_links %}
+          <a class="ext-link" href="{{ link.url }}" target="_blank" rel="noopener noreferrer">
+            <span class="n">{{ link.label }} ↗</span>
+            <span class="muted" style="font-size:12px;">{{ link.note }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- 研究檢視：預設隱藏，切換顯示 -->
+  <div id="research-block" style="display:none;">
+    <p class="muted" style="font-size:13px; margin:2px 0 14px; padding:8px 12px;
+       background:#eef2f7; border-left:3px solid var(--navy-2); border-radius:4px;">
+      ℹ️ 以下為研究人員參考資訊。</p>
+    <div style="display:flex; flex-wrap:wrap; gap:12px 20px; margin:4px 0 14px; font-size:14px;">
+      <div class="muted">taxonID：<strong style="color:var(--navy-ink);">{{ species.taicol_taxon_id|default:"—" }}</strong></div>
+      <div class="muted">目 / 科 / 屬：{{ species.order|default:"—" }} / {{ species.family|default:"—" }} / {{ species.genus|default:"—" }}</div>
+    </div>
+
+    {% if protected %}
+      <div class="panel" style="background:#fbf6df; border-color:#e6cf8a; color:var(--gold-dk); font-size:13px;">
+        🔒 本物種為保育類，為防盜獵，標本地點僅公開至縣市層級，且不提供精確座標。</div>
+    {% endif %}
+
+    {% for sp in specimens %}
+      <div class="panel spec-card">
+        <div class="spec-head">
+          <span class="cat">{{ sp.catalog }}</span>
+          <span class="tag grp">{{ sp.type }}</span>
+          <span class="muted" style="font-size:13px;">採集日期：{{ sp.date|default:"—" }}</span>
+          <span class="muted" style="font-size:13px;">地點（縣市）：{{ sp.locality|default:"—" }}</span>
+          <span class="muted" style="font-size:13px;">鑑定者：{{ sp.identified_by|default:"—" }}</span>
+        </div>
+        {% if sp.history %}
+          <div style="margin-top:12px; border-top:1px solid var(--bd); padding-top:10px;">
+            <div style="font-size:13px; font-weight:700; color:var(--navy-ink); margin-bottom:6px;">鑑定歷程</div>
+            {% for h in sp.history %}
+              <div style="font-size:13px; padding:3px 0;">
+                <span class="muted">{{ h.date|default:"—" }}</span>
+                <span class="sci">{{ h.species }}</span>
+                {% if h.is_current %}<span class="tag" style="background:#e3f0e3; color:#2f7a3a;">現行</span>{% endif %}
+                {% if h.identified_by %}<span class="muted">— {{ h.identified_by }}</span>{% endif %}
+                {% if h.basis %}<span class="muted">（{{ h.basis }}）</span>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    {% empty %}
+      <div class="panel empty-state" style="padding:30px 22px;">
+        <div class="ico" style="font-size:34px;">📦</div>
+        <div class="t" style="font-size:17px;">本館目前無此物種標本</div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <p class="muted" style="margin-top:18px; font-size:12px;">
+    ※ 為保護隱私，本頁不顯示採集者／來源等姓名，且座標僅公開至縣市層級。</p>
+
+  <div style="margin-top:16px; padding-top:12px; border-top:1px solid var(--bd);
+       font-size:12px; color:var(--muted);">
+    資料來源：蘭陽博物館 飛行生物特展典藏系統</div>
+
+  <script>
+    function setView(mode){
+      var research = document.getElementById('research-block');
+      var bS = document.getElementById('btn-simple'), bR = document.getElementById('btn-research');
+      var on = {background:'#b08643', color:'#fff'}, off = {background:'#fbf6ea', color:'#726a5c'};
+      var isR = (mode === 'research');
+      if(isR){
+        research.style.display = 'block';
+        // 重新觸發淡入動畫（僅視覺效果，不改變切換邏輯）
+        research.classList.remove('fade-up');
+        void research.offsetWidth;
+        research.classList.add('fade-up');
+      } else {
+        research.style.display = 'none';
+      }
+      Object.assign((isR?bR:bS).style, on);
+      Object.assign((isR?bS:bR).style, off);
+    }
+  </script>
+{% endblock %}

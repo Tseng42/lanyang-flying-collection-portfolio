@@ -1,0 +1,36 @@
+# ---- 機密 / 環境 ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.*
+
+# ---- 資料庫（含備份）----
+db.sqlite3
+db.sqlite3-journal
+backups/
+
+# ---- 使用者上傳的媒體檔 ----
+media/
+
+# ---- 收集後的靜態檔（部署時由 collectstatic 產生）----
+staticfiles/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+
+# ---- 虛擬環境 ----
+venv/
+.venv/
+env/
+ENV/
+
+# ---- 編輯器 / 系統 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

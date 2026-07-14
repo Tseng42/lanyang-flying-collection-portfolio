@@ -1,0 +1,23 @@
+{% extends "collection/base_public.html" %}
+
+{% block title %}館藏統計 · 蘭陽博物館 飛行生物典藏{% endblock %}
+
+{% block content %}
+  <a class="backlink" href="{% url 'home' %}">← 回首頁</a>
+  <h1>館藏統計</h1>
+  <p class="lead">蘭陽博物館 飛行生物典藏公開統計。</p>
+
+  {% include "collection/_stats_public.html" %}
+
+  {% if request.user.is_authenticated %}
+    <p style="margin-top:24px;">
+      <a class="btn navy" href="{% url 'staff_stats' %}">查看館方完整統計 →</a></p>
+  {% else %}
+    <p class="muted" style="margin-top:24px; font-size:13px;">
+      內部管理統計需登入後於<a href="{% url 'staff_stats' %}">館方統計頁</a>檢視。</p>
+  {% endif %}
+
+  <div style="margin-top:16px; padding-top:12px; border-top:1px solid var(--bd);
+       font-size:12px; color:var(--muted);">
+    資料來源：蘭陽博物館 飛行生物特展典藏系統</div>
+{% endblock %}

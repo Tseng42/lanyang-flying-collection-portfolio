@@ -1,0 +1,98 @@
+{% extends "unfold/layouts/base_simple.html" %}
+{% load i18n %}
+
+{% block title %}{{ site_title }}{% endblock %}
+
+{% block content %}
+{# 回首頁按鈕已移至頁首列（unfold/helpers/header.html），此處不再放浮動按鈕 #}
+<style>
+  .lym-dash { --card-bg:#fff; --card-bd:#e5e7eb; --ink:#111827; --muted:#6b7280;
+              --accent:#1d4ed8; --alert:#b91c1c; --alert-bg:#fef2f2; }
+  html.dark .lym-dash { --card-bg:#1f2937; --card-bd:#374151; --ink:#f3f4f6;
+              --muted:#9ca3af; --accent:#60a5fa; --alert:#f87171; --alert-bg:#3f2626; }
+  .lym-dash { color:var(--ink); }
+  .lym-dash h2 { font-size:15px; font-weight:600; margin:24px 0 12px; color:var(--ink); }
+  .lym-dash h2:first-child { margin-top:0; }
+  .lym-grid { display:grid; gap:16px;
+              grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); }
+  .lym-card { display:block; background:var(--card-bg); border:1px solid var(--card-bd);
+              border-radius:10px; padding:16px 18px; text-decoration:none; color:inherit;
+              transition:box-shadow .15s, transform .05s; }
+  .lym-card:hover { box-shadow:0 2px 10px rgba(0,0,0,.10); }
+  .lym-card .label { font-size:13px; color:var(--muted); }
+  .lym-card .value { font-size:30px; font-weight:700; line-height:1.1; margin-top:6px;
+                     color:var(--accent); }
+  .lym-card .sub { font-size:12px; color:var(--muted); margin-top:6px; }
+  .lym-card.alert { border-color:var(--alert); background:var(--alert-bg); }
+  .lym-card.alert .value { color:var(--alert); }
+  .lym-group { background:var(--card-bg); border:1px solid var(--card-bd);
+               border-radius:10px; padding:14px 16px; }
+  .lym-group .g-name { font-weight:600; margin-bottom:8px; }
+  .lym-group a { color:var(--accent); text-decoration:none; font-size:13px;
+                 display:inline-flex; gap:4px; }
+  .lym-group a:hover { text-decoration:underline; }
+  .lym-group .g-row { display:flex; justify-content:space-between; padding:3px 0;
+                      font-size:13px; }
+  .lym-recent { background:var(--card-bg); border:1px solid var(--card-bd);
+                border-radius:10px; overflow:hidden; }
+  .lym-recent a { display:flex; gap:14px; padding:11px 16px; text-decoration:none;
+                  color:var(--ink); border-top:1px solid var(--card-bd); font-size:13px; }
+  .lym-recent a:first-child { border-top:none; }
+  .lym-recent a:hover { background:rgba(29,78,216,.06); }
+  .lym-recent .cat { font-weight:600; color:var(--accent); min-width:130px; }
+  .lym-recent .sci { flex:1; font-style:italic; }
+  .lym-recent .time { color:var(--muted); white-space:nowrap; }
+  .lym-empty { color:var(--muted); font-size:13px; padding:14px 16px; }
+</style>
+
+<div class="lym-dash">
+
+  <h2>館藏統計</h2>
+  <div class="lym-grid">
+    {% for c in kpi_cards %}
+      <a class="lym-card" href="{{ c.link }}">
+        <div class="label">{{ c.label }}</div>
+        <div class="value">{{ c.value }}</div>
+      </a>
+    {% endfor %}
+  </div>
+
+  <h2>各分類群（物種數 / 標本數）</h2>
+  <div class="lym-grid">
+    {% for g in group_rows %}
+      <div class="lym-group">
+        <div class="g-name">{{ g.label }}</div>
+        <div class="g-row"><span>物種</span>
+          <a href="{{ g.species_link }}">{{ g.species }} →</a></div>
+        <div class="g-row"><span>標本</span>
+          <a href="{{ g.specimen_link }}">{{ g.specimens }} →</a></div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <h2>待辦提醒</h2>
+  <div class="lym-grid">
+    {% for c in todo_cards %}
+      <a class="lym-card {% if c.alert %}alert{% endif %}" href="{{ c.link }}">
+        <div class="label">{{ c.label }}</div>
+        <div class="value">{{ c.value }}</div>
+        <div class="sub">{{ c.sub }}</div>
+      </a>
+    {% endfor %}
+  </div>
+
+  <h2>最近新增標本</h2>
+  <div class="lym-recent">
+    {% for r in recent_specimens %}
+      <a href="{{ r.link }}">
+        <span class="cat">{{ r.catalog }}</span>
+        <span class="sci">{{ r.scientific }}</span>
+        <span class="time">{{ r.created|date:"Y-m-d H:i" }}</span>
+      </a>
+    {% empty %}
+      <div class="lym-empty">目前尚無標本資料。</div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}

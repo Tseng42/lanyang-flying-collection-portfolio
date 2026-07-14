@@ -1,0 +1,225 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}蘭陽博物館 飛行生物典藏系統{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      /* 主色：深藍；底：米白；點綴：金銅／大地色（小面積） */
+      --navy:#1b2b4a; --navy-2:#294a75; --navy-ink:#14223c;
+      --cream:#f6f1e7; --paper:#fffdf9; --sand:#efe7d5; --bd:#e6ddca;
+      --ink:#282420; --muted:#726a5c;
+      --gold:#b08643; --gold-dk:#8a6631; --bronze:#9c6f3f;
+      --c-endangered:#b3261e; --c-endangered-bg:#fbeae8;
+      --c-rare:#c9701a; --c-rare-bg:#fdf0e2;
+      --c-other:#b9971f; --c-other-bg:#fbf6df;
+      --c-general:#8a8a8a; --c-general-bg:#edeff0;
+      --serif:"Noto Serif TC","Songti TC","Microsoft JhengHei",Georgia,serif;
+      --shadow:0 12px 30px -12px rgba(20,34,60,.22);
+      --ease:cubic-bezier(.2,.7,.2,1);
+    }
+    *{ box-sizing:border-box; }
+    html{ -webkit-text-size-adjust:100%; }
+    body{ margin:0; background:var(--cream); color:var(--ink); line-height:1.72;
+          font-family:var(--serif); font-weight:400;
+          background-image:radial-gradient(1200px 400px at 50% -120px, rgba(176,134,67,.06), transparent 70%); }
+    img{ max-width:100%; height:auto; }
+    a{ color:var(--navy-2); text-decoration:none; transition:color .2s ease; }
+    a:hover{ color:var(--gold-dk); }
+
+    /* 頁首 */
+    .topbar{ background:var(--navy); color:#f4efe4; padding:15px 22px;
+             border-bottom:2px solid var(--gold);
+             display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .topbar a{ color:#f4efe4; }
+    .topbar a:hover{ color:#fff; }
+    .topbar .brand{ font-size:18px; font-weight:700; letter-spacing:.6px; }
+    .home-btn{ background:var(--gold); color:#fff !important; padding:8px 15px;
+               border-radius:10px; font-size:13px; font-weight:700; white-space:nowrap;
+               transition:background-color .25s ease, transform .25s var(--ease); }
+    .home-btn:hover{ background:var(--gold-dk); transform:translateY(-1px); }
+
+    .wrap{ max-width:1040px; margin:0 auto; padding:44px 22px 30px; }
+    h1{ font-family:var(--serif); font-weight:900; font-size:34px; letter-spacing:.5px;
+        margin:0 0 8px; color:var(--navy-ink); line-height:1.25; }
+    .lead{ color:var(--muted); margin:0 0 34px; font-size:16px; }
+    .sci{ font-family:Georgia,"Times New Roman",serif; font-style:italic; }
+    .muted{ color:var(--muted); }
+
+    /* 按鈕 */
+    .btn{ display:inline-block; background:var(--gold); color:#fff; padding:12px 26px;
+          border-radius:12px; font-weight:700; border:none; cursor:pointer; font-size:15px;
+          text-align:center; letter-spacing:.5px;
+          transition:background-color .25s ease, transform .25s var(--ease), box-shadow .25s ease; }
+    .btn:hover{ background:var(--gold-dk); color:#fff; transform:translateY(-2px);
+                box-shadow:0 8px 18px -8px rgba(138,102,49,.7); }
+    .btn.navy{ background:var(--navy); }
+    .btn.navy:hover{ background:var(--navy-2); box-shadow:0 8px 18px -8px rgba(27,43,74,.7); }
+
+    /* 卡片 */
+    .panel{ background:var(--paper); border:1px solid var(--bd); border-radius:16px;
+            padding:24px 26px; margin-bottom:24px;
+            transition:transform .35s var(--ease), box-shadow .35s ease, border-color .35s ease; }
+    a.panel, a.stat-card, .ext-link{ display:block; }
+    a.panel:hover, a.stat-card:hover{ transform:translateY(-4px); box-shadow:var(--shadow);
+            border-color:#d8c9a6; color:inherit; }
+    .ext-link:hover{ transform:translateY(-2px); box-shadow:var(--shadow); }
+
+    /* 標籤 */
+    .tag{ display:inline-block; font-size:12px; padding:3px 11px; border-radius:999px;
+          border:1px solid transparent; letter-spacing:.4px; }
+    .tag.grp{ background:var(--sand); color:var(--navy-2); border-color:#e0d4b8; }
+    .cons-endangered{ background:var(--c-endangered-bg); color:var(--c-endangered); border-color:var(--c-endangered); }
+    .cons-rare{ background:var(--c-rare-bg); color:var(--c-rare); border-color:var(--c-rare); }
+    .cons-other{ background:var(--c-other-bg); color:var(--c-other); border-color:var(--c-other); }
+    .cons-general{ background:var(--c-general-bg); color:var(--c-general); }
+
+    .backlink{ font-size:13px; margin-bottom:18px; display:inline-block; color:var(--muted);
+               letter-spacing:.5px; }
+    .backlink:hover{ color:var(--gold-dk); }
+    footer.site{ text-align:center; color:var(--muted); font-size:12px; padding:30px 20px;
+                 letter-spacing:.5px; }
+
+    /* Hero（可置入特展主視覺背景圖；未放圖時優雅降級為深藍） */
+    .hero{ position:relative; background-color:#12203a;
+           background-size:cover; background-position:center center; background-repeat:no-repeat;
+           background-image:radial-gradient(900px 500px at 80% -10%, rgba(176,134,67,.28), transparent 60%), linear-gradient(160deg,var(--navy),#12203a);
+           color:#f7f3ea; border-bottom:2px solid var(--gold); overflow:hidden; }
+    .hero-inner{ max-width:1040px; margin:0 auto; padding:92px 22px 84px; text-align:center; position:relative; }
+    .hero .eyebrow{ letter-spacing:8px; color:#e2cea4; font-size:12px; margin-bottom:18px; text-shadow:0 1px 10px rgba(0,0,0,.35); }
+    .hero h1{ color:#fff; font-size:52px; font-weight:900; margin:0 0 16px; letter-spacing:2px; line-height:1.15; text-shadow:0 2px 20px rgba(0,0,0,.4); }
+    .hero .sub{ color:#efe7d5; font-size:18px; max-width:640px; margin:0 auto 32px; line-height:1.8; text-shadow:0 1px 14px rgba(0,0,0,.38); }
+
+    /* 首頁入口卡片 */
+    .entry-cards{ display:grid; gap:24px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); }
+    .entry-card{ text-align:center; padding:40px 26px; }
+    .entry-card .ico{ font-size:42px; }
+    .entry-card .t{ font-family:var(--serif); font-size:22px; font-weight:700; margin:14px 0 6px; color:var(--navy-ink); }
+    .staff-bar{ display:flex; align-items:center; gap:12px; margin-top:26px; padding:16px 20px;
+                border:1px dashed #cdb98d; border-radius:14px; background:#fbf6ea; color:var(--muted);
+                transition:background-color .3s ease, transform .3s var(--ease); }
+    .staff-bar:hover{ background:#f7efdd; transform:translateY(-1px); }
+    .staff-bar .arrow{ margin-left:auto; font-size:13px; }
+
+    /* 搜尋表單 */
+    .search-form{ display:flex; flex-wrap:wrap; gap:14px; align-items:end; }
+    .search-form .field{ display:flex; flex-direction:column; }
+    .search-form label{ font-size:12px; color:var(--muted); margin-bottom:6px; letter-spacing:.5px; }
+    .search-form input[type=text], .search-form select{
+        padding:12px 13px; border:1px solid var(--bd); border-radius:11px; font-size:15px;
+        background:#fff; font-family:inherit; color:var(--ink);
+        transition:border-color .25s ease, box-shadow .25s ease; }
+    .search-form input[type=text]{ min-width:260px; }
+    .search-form input[type=text]:focus, .search-form select:focus{
+        outline:none; border-color:var(--navy-2); box-shadow:0 0 0 4px rgba(41,74,117,.14); }
+
+    /* 物種卡片清單 */
+    .species-grid{ display:grid; gap:22px; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); }
+    .species-card{ padding:24px 26px; margin-bottom:0; position:relative; }
+    .species-card .cn{ font-family:var(--serif); font-size:22px; font-weight:700; color:var(--navy-ink); }
+    .species-card .sci{ margin:4px 0 16px; color:var(--muted); font-size:15px; }
+    .species-card .tags{ display:flex; flex-wrap:wrap; gap:8px; }
+
+    /* 詳細頁抬頭與檢視切換 */
+    .detail-head{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:16px; margin-bottom:24px; }
+    .detail-head h1{ font-size:40px; margin-bottom:6px; }
+    .view-toggle{ display:inline-flex; border:1px solid #d8c39a; border-radius:12px; overflow:hidden;
+                  box-shadow:0 2px 8px -4px rgba(20,34,60,.25); }
+    .view-toggle button{ border:none; padding:11px 22px; cursor:pointer; font:inherit; font-size:15px;
+                         font-weight:600; transition:background-color .3s ease, color .3s ease; }
+
+    /* Bento 方塊版面 */
+    .bento{ display:grid; gap:20px; grid-template-columns:repeat(6,1fr); margin-bottom:24px; }
+    .bento > *{ margin-bottom:0; }
+    .b-intro{ grid-column:span 4; }
+    .b-count{ grid-column:span 2; }
+    .b-tags{ grid-column:span 3; }
+    .b-ext{ grid-column:span 3; }
+    .card-navy{ background:radial-gradient(500px 300px at 90% -20%, rgba(176,134,67,.32), transparent 60%), linear-gradient(155deg,var(--navy),#12203a);
+                color:#efe6d3; border:none; display:flex; flex-direction:column; justify-content:center; }
+    .card-navy .k{ font-size:13px; letter-spacing:1px; color:#cdbf9f; }
+    .card-navy .big{ font-family:var(--serif); font-size:52px; font-weight:900; color:#fff; line-height:1; margin:8px 0 2px; }
+    .card-title{ font-family:var(--serif); font-weight:700; color:var(--navy-ink); font-size:17px;
+                 margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+    .card-title::before{ content:""; width:16px; height:2px; background:var(--gold); display:inline-block; }
+    .intro-text{ font-size:16px; line-height:1.95; color:#3a352d; margin:0; }
+
+    /* 延伸查詢外部連結 */
+    .ext-links{ display:flex; flex-wrap:wrap; gap:12px; }
+    .ext-link{ display:inline-flex; flex-direction:column; border:1px solid #ddcca8;
+               border-radius:12px; padding:11px 16px; background:#fbf6ea;
+               transition:transform .3s var(--ease), box-shadow .3s ease; }
+    .ext-link .n{ color:var(--navy-2); font-weight:700; font-size:14px; }
+
+    /* 標本卡（研究檢視） */
+    .spec-card{ padding:20px 22px; margin-bottom:16px; }
+    .spec-head{ display:flex; flex-wrap:wrap; gap:8px 18px; align-items:baseline; }
+    .spec-head .cat{ font-family:var(--serif); font-weight:700; color:var(--navy-2); font-size:16px; }
+
+    /* 研究檢視淡入 */
+    #research-block.fade-up{ animation:fadeUp .42s var(--ease); }
+    @keyframes fadeUp{ from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:none; } }
+
+    /* 統計卡片 */
+    h2.sec{ font-family:var(--serif); font-size:19px; color:var(--navy-ink); font-weight:700;
+            margin:34px 0 16px; border-left:4px solid var(--gold); padding-left:12px; }
+    .stat-grid{ display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); }
+    .stat-card{ background:var(--paper); border:1px solid var(--bd); border-radius:16px; padding:22px 24px;
+                transition:transform .35s var(--ease), box-shadow .35s ease; }
+    .stat-card .num{ font-family:var(--serif); font-size:34px; font-weight:900; color:var(--navy-2); line-height:1.1; }
+    .stat-card .lbl{ font-size:13px; color:var(--muted); margin-top:6px; letter-spacing:.5px; }
+    .stat-card.warn{ border-color:#e0b100; background:#fffbe9; }
+    .stat-card.warn .num{ color:#b45309; }
+    .stat-row{ display:flex; justify-content:space-between; font-size:14px; padding:3px 0; }
+
+    /* 空狀態 */
+    .empty-state{ text-align:center; padding:56px 24px; }
+    .empty-state .ico{ font-size:48px; }
+    .empty-state .t{ font-family:var(--serif); font-size:22px; font-weight:700; color:var(--navy-ink); margin:12px 0 8px; }
+
+    /* ---- 響應式 ---- */
+    @media (max-width:760px){
+      .bento{ grid-template-columns:1fr; }
+      .bento > *{ grid-column:1 / -1 !important; }
+    }
+    @media (max-width:640px){
+      .wrap{ padding:28px 16px 24px; }
+      h1{ font-size:26px; }
+      .hero-inner{ padding:58px 18px 54px; }
+      .hero h1{ font-size:34px; letter-spacing:1px; }
+      .hero .sub{ font-size:15px; }
+      .hero .eyebrow{ letter-spacing:4px; }
+      .detail-head h1{ font-size:30px; }
+      .search-form{ gap:12px; }
+      .search-form .field{ width:100%; }
+      .search-form input[type=text], .search-form select{ width:100%; min-width:0; }
+      .search-form .btn{ width:100%; }
+      .detail-head{ align-items:stretch; }
+      .view-toggle{ width:100%; }
+      .view-toggle button{ flex:1; padding:13px 0; }
+      .staff-bar{ flex-wrap:wrap; }
+      .staff-bar .arrow{ margin-left:0; }
+      .ext-link{ width:100%; }
+      .card-navy .big{ font-size:44px; }
+    }
+  </style>
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <div class="topbar">
+    <a href="{% url 'home' %}"><span class="brand">蘭陽博物館 · 飛行生物典藏</span></a>
+    <a class="home-btn" href="{% url 'go_home' %}?from={{ request.get_full_path|urlencode }}">🏠 回首頁</a>
+  </div>
+  {% block body %}
+  <div class="wrap">
+    {% block content %}{% endblock %}
+  </div>
+  {% endblock %}
+  <footer class="site">© 蘭陽博物館 飛行生物典藏系統</footer>
+</body>
+</html>
