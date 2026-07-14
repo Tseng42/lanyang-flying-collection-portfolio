@@ -10,6 +10,8 @@ urlpatterns = [
     path("admin-stats/", views.staff_stats_view, name="staff_stats"),
     path("go-home/", views.go_home, name="go_home"),
     path("go-home/logout/", views.go_home_logout, name="go_home_logout"),
+    path("backup/", views.backup_database, name="backup_database"),
+    path("restore/", views.restore_database, name="restore_database"),
     path("species/", views.public_species_list, name="public_species_list"),
     path(
         "species/export.csv",

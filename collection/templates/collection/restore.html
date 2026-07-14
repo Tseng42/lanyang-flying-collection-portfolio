@@ -1,0 +1,30 @@
+{% extends "collection/base_public.html" %}
+
+{% block title %}資料還原 · 蘭陽博物館 飛行生物典藏{% endblock %}
+
+{% block content %}
+  <a class="backlink" href="/admin/">← 回後台</a>
+  <h1>資料還原</h1>
+  <p class="lead">上傳先前「資料備份」下載的 JSON 檔，將其資料還原（loaddata）到系統。此功能目前僅限系統管理員。</p>
+
+  {% if result %}
+    <div class="panel" style="{% if result.0 == 'ok' %}border-color:#7aa06f; background:#eef5ea; color:#2f6b28;{% else %}border-color:#c9776f; background:#fbeae8; color:#8f2c22;{% endif %}">
+      {{ result.1 }}
+    </div>
+  {% endif %}
+
+  <div class="panel" style="max-width:560px;">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <label style="display:block; font-size:14px; color:var(--muted); margin-bottom:10px;">
+        選擇備份檔（.json）</label>
+      <input type="file" name="backup_file" accept=".json,application/json" required
+             style="display:block; margin-bottom:18px;">
+      <button class="btn navy" type="submit"
+              onclick="return confirm('確定要以此備份還原資料嗎？現有資料可能被覆蓋。');">
+        還原資料</button>
+    </form>
+    <p class="muted" style="font-size:12px; margin:16px 0 0;">
+      ⚠️ 還原會依備份內容新增或覆蓋既有紀錄，操作前請確認來源。</p>
+  </div>
+{% endblock %}

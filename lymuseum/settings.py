@@ -269,6 +269,29 @@ UNFOLD = {
                 ],
             },
             {
+                "title": "資料管理",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "資料備份",
+                        "icon": "backup",
+                        "link": reverse_lazy("backup_database"),
+                        # 僅有備份權限者可見（後端仍會強制檢查）
+                        "permission": lambda request: request.user.has_perm(
+                            "collection.can_backup_database"
+                        ),
+                    },
+                    {
+                        "title": "資料還原",
+                        "icon": "settings_backup_restore",
+                        "link": reverse_lazy("restore_database"),
+                        "permission": lambda request: request.user.has_perm(
+                            "collection.can_restore_database"
+                        ),
+                    },
+                ],
+            },
+            {
                 "title": "認證授權",
                 "separator": True,
                 "items": [

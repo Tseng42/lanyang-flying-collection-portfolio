@@ -7,10 +7,16 @@
 """
 
 import csv
+import io
+import os
 import re
+import tempfile
+from datetime import datetime
 
 from django.contrib.auth import logout
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, permission_required
+from django.core.management import call_command
+from django.db import transaction
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -214,3 +220,50 @@ def public_species_detail(request, pk):
         "external_links": species_external_links(species),
     }
     return render(request, "collection/species_detail.html", context)
+
+
+# ---------------------------------------------------------------------------
+# 資料備份／還原（後端強制權限檢查，非僅隱藏按鈕）
+#
+# 權限判定（Django 的 superuser 自動擁有所有權限）：
+#   - 備份：superuser 或具 collection.can_backup_database（→ 典藏主管、管理員）
+#   - 還原：superuser 或具 collection.can_restore_database（目前僅 superuser）
+# 未登入者：先被 login_required 導向登入頁；已登入但無權限者：raise 403。
+# ---------------------------------------------------------------------------
+
+@login_required(login_url="/admin/login/")
+@permission_required("collection.can_backup_database", raise_exception=True)
+def backup_database(request):
+    """匯出 collection 全部典藏資料為 JSON 檔下載（不含使用者帳密）。"""
+    buffer = io.StringIO()
+    call_command("dumpdata", "collection", indent=2, stdout=buffer)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    response = HttpResponse(buffer.getvalue(), content_type="application/json")
+    response["Content-Disposition"] = (
+        f'attachment; filename="lymuseum-backup-{stamp}.json"'
+    )
+    return response
+
+
+@login_required(login_url="/admin/login/")
+@permission_required("collection.can_restore_database", raise_exception=True)
+def restore_database(request):
+    """從上傳的 JSON 備份還原（loaddata）。目前僅 superuser 有此權限。"""
+    result = None
+    if request.method == "POST" and request.FILES.get("backup_file"):
+        upload = request.FILES["backup_file"]
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", delete=False, mode="wb"
+        ) as tmp:
+            for chunk in upload.chunks():
+                tmp.write(chunk)
+            tmp_path = tmp.name
+        try:
+            with transaction.atomic():
+                call_command("loaddata", tmp_path)
+            result = ("ok", f"已成功還原：{upload.name}")
+        except Exception as exc:  # noqa: BLE001 — 還原失敗要回報給使用者
+            result = ("error", f"還原失敗：{exc}")
+        finally:
+            os.unlink(tmp_path)
+    return render(request, "collection/restore.html", {"result": result})
