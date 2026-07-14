@@ -1,5 +1,0 @@
-/* 學名（拉丁名）輸入框：只讓文字斜體，不動輸入框尺寸與 Unfold 樣式。
-   中文名等其他欄位不受影響。 */
-input[name="scientific_name"] {
-  font-style: italic;
-}

@@ -206,11 +206,6 @@ class SpeciesAdminForm(forms.ModelForm):
 @admin.register(Species)
 class SpeciesAdmin(ModelAdmin):
     form = SpeciesAdminForm
-
-    class Media:
-        # 只讓學名輸入框文字斜體（不改尺寸）
-        css = {"all": ("collection/css/species_admin.css",)}
-
     list_display = (
         "common_name", "scientific_name_italic", "taxon_group",
         "conservation_status",
@@ -221,8 +216,12 @@ class SpeciesAdmin(ModelAdmin):
 
     @admin.display(description="學名", ordering="scientific_name")
     def scientific_name_italic(self, obj):
-        # 列表頁學名以斜體顯示（拉丁學名慣例）
-        return format_html("<i>{}</i>", obj.scientific_name)
+        # 列表頁學名：襯線字體 + 斜體（拉丁學名慣例，僅套用於顯示）
+        return format_html(
+            '<span style="font-family:Georgia,\'Times New Roman\',serif;'
+            'font-style:italic;">{}</span>',
+            obj.scientific_name,
+        )
 
     fieldsets = (
         ("基本分類", {
