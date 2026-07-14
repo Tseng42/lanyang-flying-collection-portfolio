@@ -189,12 +189,6 @@ class SpeciesAdminForm(forms.ModelForm):
     class Meta:
         model = Species
         fields = "__all__"
-        # 拉丁學名輸入欄以斜體顯示（中文欄位維持正體）
-        widgets = {
-            "scientific_name": forms.TextInput(
-                attrs={"style": "font-style:italic;"}
-            ),
-        }
         help_texts = {
             "common_name": "物種的中文俗名，例如：小白鷺。",
             "scientific_name": "拉丁學名，例如 Egretta garzetta。此為物種唯一識別。",
@@ -212,6 +206,11 @@ class SpeciesAdminForm(forms.ModelForm):
 @admin.register(Species)
 class SpeciesAdmin(ModelAdmin):
     form = SpeciesAdminForm
+
+    class Media:
+        # 只讓學名輸入框文字斜體（不改尺寸）
+        css = {"all": ("collection/css/species_admin.css",)}
+
     list_display = (
         "common_name", "scientific_name_italic", "taxon_group",
         "conservation_status",
