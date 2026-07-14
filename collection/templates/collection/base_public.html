@@ -213,7 +213,9 @@
 <body>
   <div class="topbar">
     <a href="{% url 'home' %}"><span class="brand">蘭陽博物館 · 飛行生物典藏</span></a>
+    {% if request.resolver_match.url_name != 'home' %}
     <a class="home-btn" href="{% url 'go_home' %}?from={{ request.get_full_path|urlencode }}">🏠 回首頁</a>
+    {% endif %}
   </div>
   {% block body %}
   <div class="wrap">

@@ -189,6 +189,12 @@ class SpeciesAdminForm(forms.ModelForm):
     class Meta:
         model = Species
         fields = "__all__"
+        # 拉丁學名輸入欄以斜體顯示（中文欄位維持正體）
+        widgets = {
+            "scientific_name": forms.TextInput(
+                attrs={"style": "font-style:italic;"}
+            ),
+        }
         help_texts = {
             "common_name": "物種的中文俗名，例如：小白鷺。",
             "scientific_name": "拉丁學名，例如 Egretta garzetta。此為物種唯一識別。",
@@ -207,12 +213,17 @@ class SpeciesAdminForm(forms.ModelForm):
 class SpeciesAdmin(ModelAdmin):
     form = SpeciesAdminForm
     list_display = (
-        "common_name", "scientific_name", "taxon_group",
+        "common_name", "scientific_name_italic", "taxon_group",
         "conservation_status",
     )
     list_filter = ("taxon_group",)
     search_fields = ("common_name", "scientific_name")
     inlines = (SpecimenInline, ObservationInline)
+
+    @admin.display(description="學名", ordering="scientific_name")
+    def scientific_name_italic(self, obj):
+        # 列表頁學名以斜體顯示（拉丁學名慣例）
+        return format_html("<i>{}</i>", obj.scientific_name)
 
     fieldsets = (
         ("基本分類", {
