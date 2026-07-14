@@ -2,8 +2,10 @@
 {% load static %}
 
 {% block body %}
-{# 特展主視覺版位：把圖片放到 collection/static/collection/img/hero.jpg 即會顯示；
-   未放圖時 url 失效，會自動降級為下方深藍罩＋底色。半透明深藍罩確保文字清楚。 #}
+{% comment %}
+  特展主視覺版位：把圖片放到 collection/static/collection/img/hero.jpg 即會顯示；
+  未放圖時 url 失效，會自動降級為下方深藍罩＋底色。半透明深藍罩確保文字清楚。
+{% endcomment %}
 <section class="hero" style="background-image:
     radial-gradient(900px 500px at 80% -10%, rgba(176,134,67,.22), transparent 60%),
     linear-gradient(160deg, rgba(18,32,58,.80), rgba(20,34,60,.72)),

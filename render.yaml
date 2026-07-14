@@ -20,6 +20,13 @@ services:
         fromDatabase:
           name: lymuseum-db
           property: connectionString
+      # 部署時自動建立管理員（值請在 Render Dashboard 設定，不寫進版控）
+      - key: DJANGO_SUPERUSER_USERNAME
+        sync: false
+      - key: DJANGO_SUPERUSER_EMAIL
+        sync: false
+      - key: DJANGO_SUPERUSER_PASSWORD
+        sync: false
     # 註：ALLOWED_HOSTS 不需手動設定，settings.py 會自動納入 Render 的 RENDER_EXTERNAL_HOSTNAME。
 
 # PostgreSQL 資料庫（Blueprint 會自動建立並連結到上方服務）

@@ -9,3 +9,6 @@ python manage.py collectstatic --no-input
 
 # 套用資料庫遷移（同時會自動建立/校正權限群組）
 python manage.py migrate
+
+# 若尚無管理員且已設 DJANGO_SUPERUSER_* 環境變數，自動建立一個（未設則略過）
+python manage.py ensure_superuser
