@@ -8,11 +8,19 @@ import csv
 
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import Group, User
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.urls import path
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin, TabularInline
+from unfold.forms import (
+    AdminPasswordChangeForm,
+    UserChangeForm,
+    UserCreationForm,
+)
 
 from .models import (
     CATALOG_NUMBER_RE, Identification, Movement, Observation, Species,
@@ -490,3 +498,24 @@ class ObservationAdmin(ModelAdmin):
     @admin.display(description="basisOfRecord")
     def basis_of_record(self, obj):
         return obj.BASIS_OF_RECORD
+
+
+# ---------------------------------------------------------------------------
+# 修正 django-unfold 與 Django 內建 User 表單的樣式衝突：
+# 預設 UserAdmin 的密碼欄位在 unfold 下不會正確渲染，改用 unfold 提供的
+# 相容表單重新註冊 User／Group，讓「新增／修改使用者」的密碼框正常顯示。
+# ---------------------------------------------------------------------------
+admin.site.unregister(User)
+admin.site.unregister(Group)
+
+
+@admin.register(User)
+class UserAdmin(BaseUserAdmin, ModelAdmin):
+    form = UserChangeForm
+    add_form = UserCreationForm
+    change_password_form = AdminPasswordChangeForm
+
+
+@admin.register(Group)
+class GroupAdmin(BaseGroupAdmin, ModelAdmin):
+    pass
