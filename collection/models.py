@@ -76,6 +76,8 @@ class Species(models.Model):
         "物種介紹", blank=True, default="",
         help_text="公開頁面顯示的物種簡介。",
     )
+    # 最後更新時間：存檔時自動更新，供公開頁顯示「資料最後更新」與學術引用
+    updated_at = models.DateTimeField("最後更新", auto_now=True)
 
     class Meta:
         verbose_name = "物種"
