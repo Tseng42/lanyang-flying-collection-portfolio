@@ -27,6 +27,9 @@ services:
         sync: false
       - key: DJANGO_SUPERUSER_PASSWORD
         sync: false
+      # 媒體檔外部儲存 Cloudinary 憑證（值請在 Dashboard 設定，不寫進版控）
+      - key: CLOUDINARY_URL
+        sync: false
     # 註：ALLOWED_HOSTS 不需手動設定，settings.py 會自動納入 Render 的 RENDER_EXTERNAL_HOSTNAME。
 
 # PostgreSQL 資料庫（Blueprint 會自動建立並連結到上方服務）

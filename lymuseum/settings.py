@@ -82,6 +82,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Cloudinary 媒體儲存（僅在設定 CLOUDINARY_URL 時實際生效）
+    'cloudinary_storage',
+    'cloudinary',
     'collection',
 ]
 
@@ -187,6 +190,15 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
     },
 }
+
+# 媒體檔（上傳的標本影像等）：
+# - 設了環境變數 CLOUDINARY_URL → 存到 Cloudinary（Render 磁碟會掉檔，故用外部儲存）。
+#   cloudinary 套件會自動讀取 CLOUDINARY_URL，金鑰不寫死在程式碼。
+# - 未設 → fallback 回本機檔案儲存，方便本機開發測試。
+if os.environ.get('CLOUDINARY_URL'):
+    STORAGES["default"] = {
+        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+    }
 
 # Media files (uploaded specimen images)
 MEDIA_URL = 'media/'
