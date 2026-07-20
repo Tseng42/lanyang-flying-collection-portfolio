@@ -59,6 +59,32 @@
     </div>
   </div>
 
+  <!-- 物種影像藝廊（公開影像；後端已過濾 is_public，保育類不含觀察影像） -->
+  {% if images %}
+    <h2 class="sec">物種影像</h2>
+    <div class="img-gallery">
+      {% for im in images %}
+        <figure class="img-cell">
+          <a class="img-zoom" href="#lb-p-{{ forloop.counter }}">
+            <img src="{{ im.thumb }}" alt="{{ im.alt }}" loading="lazy">
+          </a>
+          <figcaption>
+            {% if im.caption %}<div class="cap">{{ im.caption }}</div>{% endif %}
+            <div class="meta">
+              {% if im.photographer %}<span>攝影：{{ im.photographer }}</span>{% endif %}
+              <span>{{ im.license }}</span>
+              {% if im.license_note %}<span class="note">授權說明：{{ im.license_note }}</span>{% endif %}
+            </div>
+          </figcaption>
+          <!-- 純 CSS lightbox：點縮圖開啟，點遮罩關閉 -->
+          <a href="#_" class="lightbox" id="lb-p-{{ forloop.counter }}">
+            <img src="{{ im.full }}" alt="{{ im.alt }}">
+          </a>
+        </figure>
+      {% endfor %}
+    </div>
+  {% endif %}
+
   <!-- 研究檢視：預設隱藏，切換顯示 -->
   <div id="research-block" style="display:none;">
     <p class="muted" style="font-size:13px; margin:2px 0 14px; padding:8px 12px;
@@ -68,6 +94,31 @@
       <div class="muted">taxonID：<strong style="color:var(--navy-ink);">{{ species.taicol_taxon_id|default:"—" }}</strong></div>
       <div class="muted">目 / 科 / 屬：{{ species.order|default:"—" }} / {{ species.family|default:"—" }} / {{ species.genus|default:"—" }}</div>
     </div>
+
+    {% if research_images %}
+      <h2 class="sec">未公開影像（僅館內人員）</h2>
+      <div class="img-gallery">
+        {% for im in research_images %}
+          <figure class="img-cell">
+            <a class="img-zoom" href="#lb-r-{{ forloop.counter }}">
+              <img src="{{ im.thumb }}" alt="{{ im.alt }}" loading="lazy">
+            </a>
+            <figcaption>
+              <span class="priv-badge">未公開</span>
+              {% if im.caption %}<div class="cap">{{ im.caption }}</div>{% endif %}
+              <div class="meta">
+                {% if im.photographer %}<span>攝影：{{ im.photographer }}</span>{% endif %}
+                <span>{{ im.license }}</span>
+                {% if im.license_note %}<span class="note">授權說明：{{ im.license_note }}</span>{% endif %}
+              </div>
+            </figcaption>
+            <a href="#_" class="lightbox" id="lb-r-{{ forloop.counter }}">
+              <img src="{{ im.full }}" alt="{{ im.alt }}">
+            </a>
+          </figure>
+        {% endfor %}
+      </div>
+    {% endif %}
 
     {% if protected %}
       <div class="panel" style="background:#fbf6df; border-color:#e6cf8a; color:var(--gold-dk); font-size:13px;">

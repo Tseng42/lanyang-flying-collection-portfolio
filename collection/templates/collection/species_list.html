@@ -47,11 +47,20 @@
     <div class="species-grid">
       {% for s in species_list %}
         <a class="panel species-card" href="{% url 'public_species_detail' s.pk %}">
-          <div class="cn">{{ s.common_name|default:"（無中文名）" }}</div>
-          <div class="sci">{{ s.scientific_name }}</div>
-          <div class="tags">
-            <span class="tag grp">{{ s.get_taxon_group_display }}</span>
-            <span class="tag cons-{{ s.conservation_status }}">{{ s.get_conservation_status_display }}</span>
+          <div class="species-thumb">
+            {% if s.thumb_url %}
+              <img src="{{ s.thumb_url }}" alt="{{ s.common_name }} {{ s.scientific_name }}" loading="lazy">
+            {% else %}
+              <div class="species-thumb-ph" aria-hidden="true">🕊️</div>
+            {% endif %}
+          </div>
+          <div class="species-card-body">
+            <div class="cn">{{ s.common_name|default:"（無中文名）" }}</div>
+            <div class="sci">{{ s.scientific_name }}</div>
+            <div class="tags">
+              <span class="tag grp">{{ s.get_taxon_group_display }}</span>
+              <span class="tag cons-{{ s.conservation_status }}">{{ s.get_conservation_status_display }}</span>
+            </div>
           </div>
         </a>
       {% endfor %}
