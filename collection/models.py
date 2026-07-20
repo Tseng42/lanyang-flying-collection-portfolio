@@ -33,6 +33,9 @@ class Species(models.Model):
         OTHER = "other", "其他應予保育"
         RARE = "rare", "珍貴稀有"
         ENDANGERED = "endangered", "瀕臨絕種"
+        # 尚未查證：提供「不確定」時的合法填法，避免被迫亂選；
+        # 因非「一般類」，公開頁一律採保護性處理（fail-safe）。
+        UNVERIFIED = "unverified", "待查證"
 
     class IucnStatus(models.TextChoices):
         # IUCN 紅皮書受威脅等級
@@ -69,7 +72,11 @@ class Species(models.Model):
     conservation_status = models.CharField(
         "保育等級（台灣）", max_length=20,
         choices=ConservationStatus.choices,
-        default=ConservationStatus.GENERAL,
+        # 移除預設值 → 建檔者必須主動選擇，避免忘改「一般類」造成誤判。
+        help_text=(
+            "必選。不確定時請選「待查證」。凡非「一般類」（含待查證）者，"
+            "公開頁一律採保護性處理：其觀察影像不對外顯示、標本地點僅到縣市層級。"
+        ),
     )
     iucn_status = models.CharField(
         "保育等級（IUCN）", max_length=2,
@@ -87,6 +94,12 @@ class Species(models.Model):
         verbose_name = "物種"
         verbose_name_plural = "物種"
         ordering = ["taxon_group", "scientific_name"]
+        indexes = [
+            # 支援清單預設排序與「分類群」篩選
+            models.Index(fields=["taxon_group", "scientific_name"]),
+            # 支援「保育等級」篩選
+            models.Index(fields=["conservation_status"]),
+        ]
 
     def __str__(self):
         if self.common_name:
@@ -196,6 +209,11 @@ class Specimen(models.Model):
     collection_date = models.DateField("採集日期", null=True, blank=True)
     collection_location = models.CharField(
         "採集地點", max_length=300, blank=True,
+        help_text=(
+            "請填至縣市與鄉鎮市區層級即可（例：宜蘭縣蘇澳鎮）。"
+            "為保護保育類棲地、防範盜獵，請勿填入巷弄、門牌、確切巢位或棲所座標；"
+            "精確座標請填於下方「緯度／經度」欄位（不會出現在公開頁）。"
+        ),
     )
     latitude = models.DecimalField(
         "緯度", max_digits=9, decimal_places=6, null=True, blank=True,
@@ -291,6 +309,12 @@ class Specimen(models.Model):
         verbose_name = "標本"
         verbose_name_plural = "標本"
         ordering = ["catalog_number"]
+        indexes = [
+            # list_filter 常用欄位（species FK 已自動索引）
+            models.Index(fields=["status"]),
+            models.Index(fields=["preparation_status"]),
+            models.Index(fields=["cause_of_death"]),
+        ]
 
     def hazard_labels(self):
         """把已勾選的危害代碼轉成人類可讀的標籤清單。"""
@@ -377,6 +401,11 @@ class Observation(models.Model):
         verbose_name = "觀察紀錄"
         verbose_name_plural = "觀察紀錄"
         ordering = ["-observation_date", "record_number"]
+        indexes = [
+            # 支援「資料來源」篩選與依觀察日期排序（species FK 已自動索引）
+            models.Index(fields=["data_source"]),
+            models.Index(fields=["observation_date"]),
+        ]
 
     @property
     def basis_of_record(self):

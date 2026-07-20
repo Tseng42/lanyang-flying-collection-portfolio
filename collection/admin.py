@@ -156,6 +156,24 @@ class SpecimenAdminForm(forms.ModelForm):
         date = cleaned.get("collection_date")
         confirmed = cleaned.get("confirm_duplicate")
 
+        # ── 日期邏輯驗證（欄位皆選填，僅在相關兩者都有值時檢查）──
+        collection_date = cleaned.get("collection_date")
+        acquisition_date = cleaned.get("acquisition_date")
+        preparation_date = cleaned.get("preparation_date")
+        identified_date = cleaned.get("identified_date")
+        if preparation_date and acquisition_date and preparation_date < acquisition_date:
+            self.add_error(
+                "preparation_date", "製作完成日期不得早於取得日期。"
+            )
+        if preparation_date and collection_date and preparation_date < collection_date:
+            self.add_error(
+                "preparation_date", "製作完成日期不得早於採集日期。"
+            )
+        if identified_date and collection_date and identified_date < collection_date:
+            self.add_error(
+                "identified_date", "鑑定日期不得早於採集日期。"
+            )
+
         # 三者齊全才有辨識重複的意義；已勾選確認則放行
         if species and location and date and not confirmed:
             dup = Specimen.objects.filter(
@@ -245,7 +263,11 @@ class SpeciesAdminForm(forms.ModelForm):
             "order": "分類階層：目。可留空，之後由 TaiCOL 補齊。",
             "family": "分類階層：科。可留空，之後由 TaiCOL 補齊。",
             "genus": "分類階層：屬。可留空，之後由 TaiCOL 補齊。",
-            "conservation_status": "依《野生動物保育法》的保育等級。",
+            "conservation_status": (
+                "依《野生動物保育法》的保育等級，必選。不確定時請選「待查證」。"
+                "凡非「一般類」（含待查證）者，公開頁一律保護性處理："
+                "觀察影像不對外顯示、標本地點僅到縣市層級。"
+            ),
             "iucn_status": "IUCN 紅皮書受威脅等級。",
             "introduction": "公開頁顯示的物種簡介，請以淺白文字介紹。",
         }
@@ -258,9 +280,24 @@ class SpeciesAdmin(ModelAdmin):
         "common_name", "scientific_name_italic", "taxon_group",
         "conservation_status",
     )
-    list_filter = ("taxon_group",)
+    list_filter = ("taxon_group", "conservation_status")
     search_fields = ("common_name", "scientific_name")
     inlines = (SpeciesImageInline, SpecimenInline, ObservationInline)
+
+    class Media:
+        # 選到「非一般類」保育等級時，於表單顯示醒目提示（純前端提示，不影響儲存）
+        js = ("collection/js/conservation_hint.js",)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # 保育等級為「待查證」時提醒盡快查證（仍允許儲存）
+        if obj.conservation_status in ("", Species.ConservationStatus.UNVERIFIED):
+            self.message_user(
+                request,
+                f"「{obj}」的保育等級為「待查證」，請盡快查證確認；"
+                "在此之前，公開頁會以保護性方式處理其觀察影像與地點。",
+                level=messages.WARNING,
+            )
 
     @admin.display(description="學名", ordering="scientific_name")
     def scientific_name_italic(self, obj):
@@ -289,10 +326,40 @@ class SpeciesAdmin(ModelAdmin):
     )
 
 
+class MovementInlineFormSet(forms.BaseInlineFormSet):
+    """驗證借出／歸還日期邏輯。
+
+    Movement 為「單一事件單一日期」的紀錄（借出、歸還各為一列），
+    故以跨列規則檢查：任何「歸還」的日期不得早於最早的「借出」日期。
+    """
+
+    def clean(self):
+        super().clean()
+        loan_dates, return_dates = [], []
+        for form in self.forms:
+            if not hasattr(form, "cleaned_data"):
+                continue
+            cd = form.cleaned_data
+            if not cd or cd.get("DELETE"):
+                continue
+            mtype, mdate = cd.get("movement_type"), cd.get("movement_date")
+            if not mtype or not mdate:
+                continue
+            if mtype == Movement.MovementType.LOAN_OUT:
+                loan_dates.append(mdate)
+            elif mtype == Movement.MovementType.RETURN:
+                return_dates.append(mdate)
+        if loan_dates and return_dates and min(return_dates) < min(loan_dates):
+            raise forms.ValidationError(
+                "「歸還」的日期不得早於「借出」的日期，請檢查異動紀錄的日期。"
+            )
+
+
 class MovementInline(TabularInline):
     """在標本頁面內嵌顯示異動紀錄（最新在上）。"""
 
     model = Movement
+    formset = MovementInlineFormSet
     extra = 0
     fields = (
         "movement_type", "movement_date", "counterparty",
@@ -337,6 +404,10 @@ class SpecimenAdmin(ModelAdmin):
     form = SpecimenAdminForm
     inlines = (IdentificationInline, MovementInline, SpecimenImageInline)
     actions = ["export_darwin_core_csv"]
+    # 清單頁一次帶出物種，避免逐列查詢（N+1）
+    list_select_related = ("species",)
+    # 「以此為範本另存」：同物種/同地點的標本可沿用上一筆，主鍵留空會自動產生新編號
+    save_as = True
 
     class Media:
         # 選好物種後自動建議典藏編號
@@ -533,6 +604,8 @@ class ObservationAdmin(ModelAdmin):
     autocomplete_fields = ("species",)
     readonly_fields = ("basis_of_record",)
     inlines = (ObservationImageInline,)
+    # 清單頁一次帶出物種，避免逐列查詢（N+1）
+    list_select_related = ("species",)
 
     fieldsets = (
         ("基本資訊", {
