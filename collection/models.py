@@ -115,13 +115,32 @@ class Specimen(models.Model):
 
     # 典藏編號固定機構前綴
     CATALOG_PREFIX = "LYM"
-    # 典藏編號中的類群代碼（依標本所屬物種分類群；蝙蝠與飛鼠同為 MA）
+    # 典藏編號中的類群代碼（依標本自身的類群欄位 taxon_group；蝙蝠與飛鼠同為 MA）
+    # 以字串值為鍵，同時相容 Species.TaxonGroup 與 Specimen.TaxonGroup（值相同）
     GROUP_CODE = {
-        Species.TaxonGroup.BIRD: "AV",
-        Species.TaxonGroup.INSECT: "IN",
-        Species.TaxonGroup.BAT: "MA",
-        Species.TaxonGroup.FLYING_SQUIRREL: "MA",
+        "bird": "AV",
+        "insect": "IN",
+        "bat": "MA",
+        "flying_squirrel": "MA",
+        "other": "OT",
     }
+
+    # 標本自身的類群（即使尚未鑑定到種，仍須指定；決定館藏編號的類群代碼）
+    class TaxonGroup(models.TextChoices):
+        BIRD = "bird", "鳥類"
+        INSECT = "insect", "昆蟲"
+        BAT = "bat", "蝙蝠"
+        FLYING_SQUIRREL = "flying_squirrel", "飛鼠"
+        OTHER = "other", "其他"
+
+    # 鑑定狀態（表達 Identification 歷程無法表達的粒度：未鑑定／科／屬／無法鑑定等）
+    class IdentificationStatus(models.TextChoices):
+        UNIDENTIFIED = "unidentified", "未鑑定"
+        IN_PROGRESS = "in_progress", "鑑定中"
+        TO_FAMILY = "to_family", "已鑑定至科"
+        TO_GENUS = "to_genus", "已鑑定至屬"
+        TO_SPECIES = "to_species", "已鑑定至種"
+        UNIDENTIFIABLE = "unidentifiable", "無法鑑定"
 
     class SpecimenType(models.TextChoices):
         TAXIDERMY = "taxidermy", "剝製"
@@ -193,9 +212,22 @@ class Specimen(models.Model):
         blank=True,
         help_text="留空即依「分類群代碼-年份-流水號」自動產生（例：AVE-2026-0001）；也可自行填寫。",
     )
+    taxon_group = models.CharField(
+        # max_length 用 20（非任務所述 10）：值「flying_squirrel」長 15，且刻意
+        # 與 Species.taxon_group 的值一致，資料回填可直接複製、GROUP_CODE 共用。
+        "類群", max_length=20, choices=TaxonGroup.choices,
+        help_text="即使尚未鑑定到種，仍須指定類群；此欄位決定館藏編號的類群代碼。",
+    )
+    identification_status = models.CharField(
+        "鑑定狀態", max_length=20,
+        choices=IdentificationStatus.choices,
+        default=IdentificationStatus.UNIDENTIFIED,
+    )
     species = models.ForeignKey(
         Species, on_delete=models.PROTECT,
         related_name="specimens", verbose_name="學名",
+        null=True, blank=True,
+        help_text="尚未鑑定者可留白，待鑑定後再補填。",
     )
     specimen_type = models.CharField(
         "標本類型", max_length=20, choices=SpecimenType.choices,
@@ -346,8 +378,8 @@ class Specimen(models.Model):
         return f"{prefix}{last_serial + 1:04d}"
 
     def generate_catalog_number(self):
-        """為本標本（依其物種分類群、當年度）產生下一個典藏編號。"""
-        return self.next_catalog_number(self.species.taxon_group)
+        """為本標本（依其類群 taxon_group、當年度）產生下一個典藏編號。"""
+        return self.next_catalog_number(self.taxon_group)
 
     def save(self, *args, **kwargs):
         # 典藏編號留空時自動產生；已手填則尊重原值
@@ -356,7 +388,9 @@ class Specimen(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.catalog_number}｜{self.species}"
+        # 尚未鑑定（無 species）時，以類群名稱代替，避免顯示 None
+        label = self.species if self.species_id else f"（未鑑定・{self.get_taxon_group_display()}）"
+        return f"{self.catalog_number}｜{label}"
 
 
 class Observation(models.Model):

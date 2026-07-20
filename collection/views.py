@@ -93,12 +93,13 @@ def staff_stats_view(request):
     # 待辦類數字 → 篩選後標本清單
     context["hazard_link"] = sp(hazard="any")
     context["incomplete_link"] = sp(completeness="incomplete")
+    context["unidentified_link"] = sp(identification_status="unidentified")
     for s in context["statuses"]:
         s["link"] = sp(status=s["value"])
-    # 各分類群 → 物種／標本清單
+    # 各分類群 → 物種／標本清單（標本改用自身 taxon_group 篩選）
     for g in context["groups"]:
         g["species_link"] = spc(taxon_group=g["value"])
-        g["specimen_link"] = sp(**{"species__taxon_group": g["value"]})
+        g["specimen_link"] = sp(taxon_group=g["value"])
 
     return render(request, "collection/stats_staff.html", context)
 

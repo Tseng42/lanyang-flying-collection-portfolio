@@ -20,7 +20,8 @@ def _count_map(manager, field):
 def public_stats():
     """公開統計：總數、各分類群、保育等級分布。"""
     species_by_group = _count_map(Species.objects, "taxon_group")
-    specimen_by_group = _count_map(Specimen.objects, "species__taxon_group")
+    # 標本改用自身的 taxon_group 統計，使「未鑑定標本」也計入所屬類群（不再漏算）
+    specimen_by_group = _count_map(Specimen.objects, "taxon_group")
     groups = [
         {
             "label": label,
@@ -62,21 +63,27 @@ def staff_extra_stats():
         | Q(collection_date__isnull=True)
     ).count()
 
+    # 尚未鑑定到種（無關聯物種）的標本數
+    unidentified = Specimen.objects.filter(species__isnull=True).count()
+
     status_map = _count_map(Specimen.objects, "status")
     statuses = [
         {"label": label, "value": value, "count": status_map.get(value, 0)}
         for value, label in Specimen.Status.choices
     ]
 
-    recent = [
-        {
+    recent = []
+    for s in Specimen.objects.select_related("species").order_by("-created_at")[:5]:
+        if s.species_id:
+            scientific, common = s.species.scientific_name, s.species.common_name
+        else:
+            scientific, common = f"（未鑑定・{s.get_taxon_group_display()}）", ""
+        recent.append({
             "catalog": s.catalog_number,
-            "scientific": s.species.scientific_name,
-            "common": s.species.common_name,
+            "scientific": scientific,
+            "common": common,
             "created": s.created_at,
-        }
-        for s in Specimen.objects.select_related("species").order_by("-created_at")[:5]
-    ]
+        })
 
     return {
         "hazard_total": len(hazard_lists),
@@ -84,6 +91,7 @@ def staff_extra_stats():
         "hazard_hg": hazard_hg,
         "hazard_other": hazard_other,
         "incomplete": incomplete,
+        "unidentified": unidentified,
         "statuses": statuses,
         "recent": recent,
     }

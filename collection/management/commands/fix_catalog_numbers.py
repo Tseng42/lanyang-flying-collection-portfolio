@@ -20,8 +20,8 @@ from collection.models import (
 
 
 def _compute_new_number(specimen):
-    """依物種類群與舊編號中的年份/流水號，算出新格式編號。"""
-    code = Specimen.GROUP_CODE[specimen.species.taxon_group]
+    """依標本類群與舊編號中的年份/流水號，算出新格式編號。"""
+    code = Specimen.GROUP_CODE[specimen.taxon_group]
     match = re.search(r"(\d{4})-(\d+)$", specimen.catalog_number)
     if match:
         year, serial = match.group(1), int(match.group(2))
@@ -36,7 +36,7 @@ def _compute_new_number(specimen):
         and Specimen.objects.filter(pk=candidate).exists()
     ):
         candidate = Specimen.next_catalog_number(
-            specimen.species.taxon_group, year=year_int
+            specimen.taxon_group, year=year_int
         )
     return candidate
 

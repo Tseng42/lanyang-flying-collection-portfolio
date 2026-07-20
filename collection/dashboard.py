@@ -39,10 +39,9 @@ def dashboard_callback(request, context):
             "label": label,
             "species": Species.objects.filter(taxon_group=value).count(),
             "species_link": _changelist("species", taxon_group=value),
-            "specimens": Specimen.objects.filter(
-                species__taxon_group=value).count(),
-            "specimen_link": _changelist(
-                "specimen", **{"species__taxon_group": value}),
+            # 標本改用自身 taxon_group（未鑑定標本也計入）
+            "specimens": Specimen.objects.filter(taxon_group=value).count(),
+            "specimen_link": _changelist("specimen", taxon_group=value),
         })
     context["group_rows"] = group_rows
 
@@ -65,6 +64,8 @@ def dashboard_callback(request, context):
     loaned = Specimen.objects.filter(
         status=Specimen.Status.LOANED).count()
 
+    unidentified = Specimen.objects.filter(species__isnull=True).count()
+
     context["todo_cards"] = [
         {"label": "含危害標記標本", "value": hazard_total, "alert": True,
          "sub": f"砷 {as_count}／汞 {hg_count}／其他 {other_count}",
@@ -72,6 +73,11 @@ def dashboard_callback(request, context):
         {"label": "待補完標本", "value": incomplete, "alert": False,
          "sub": "缺鑑定者或採集日期",
          "link": _changelist("specimen", completeness="incomplete")},
+        {"label": "未鑑定標本", "value": unidentified, "alert": False,
+         "sub": "尚未鑑定到種，待補填物種",
+         "link": _changelist(
+             "specimen",
+             identification_status=Specimen.IdentificationStatus.UNIDENTIFIED)},
         {"label": "借出中標本", "value": loaned, "alert": False,
          "sub": "目前狀態為「借出」",
          "link": _changelist("specimen", status=Specimen.Status.LOANED)},
@@ -80,9 +86,13 @@ def dashboard_callback(request, context):
     # 3. 最近新增的 5 件標本
     recent = []
     for s in Specimen.objects.select_related("species").order_by("-created_at")[:5]:
+        if s.species_id:
+            scientific = s.species.scientific_name
+        else:
+            scientific = f"（未鑑定・{s.get_taxon_group_display()}）"
         recent.append({
             "catalog": s.catalog_number,
-            "scientific": s.species.scientific_name,
+            "scientific": scientific,
             "created": s.created_at,
             "link": reverse(
                 "admin:collection_specimen_change", args=[s.pk]),

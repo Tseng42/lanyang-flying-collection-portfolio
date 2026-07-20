@@ -424,22 +424,38 @@ class SpecimenAdmin(ModelAdmin):
         return custom + super().get_urls()
 
     def suggest_catalog_view(self, request):
-        """回傳指定物種的下一個可用典藏編號（供表單自動建議）。"""
-        try:
-            species = Species.objects.get(pk=request.GET.get("species"))
-        except (Species.DoesNotExist, ValueError, TypeError):
+        """回傳指定類群的下一個可用典藏編號（供表單自動建議）。
+
+        優先用 taxon_group 參數；為相容舊呼叫，僅帶 species 時沿用其類群。
+        """
+        taxon_group = request.GET.get("taxon_group") or ""
+        if not taxon_group:
+            try:
+                species = Species.objects.get(pk=request.GET.get("species"))
+                taxon_group = species.taxon_group
+            except (Species.DoesNotExist, ValueError, TypeError):
+                return JsonResponse({"catalog_number": ""})
+        if taxon_group not in Specimen.GROUP_CODE:
             return JsonResponse({"catalog_number": ""})
         return JsonResponse({
-            "catalog_number": Specimen.next_catalog_number(species.taxon_group),
+            "catalog_number": Specimen.next_catalog_number(taxon_group),
         })
     list_display = (
-        "catalog_number", "species", "specimen_type", "status",
-        "hazard_flag",
+        "catalog_number", "species_or_group", "specimen_type", "status",
+        "identification_status", "hazard_flag",
     )
     list_filter = (
-        "species__taxon_group", "status", "preparation_status", "cause_of_death",
+        "taxon_group", "identification_status", "status",
+        "preparation_status", "cause_of_death",
         AccessionYearFilter, HazardFilter, CompletenessFilter,
     )
+
+    @admin.display(description="物種／類群", ordering="species__scientific_name")
+    def species_or_group(self, obj):
+        # 尚未鑑定（無 species）時顯示類群，不顯示空白或 None
+        if obj.species_id:
+            return str(obj.species)
+        return f"（未鑑定・{obj.get_taxon_group_display()}）"
     search_fields = (
         "catalog_number", "species__scientific_name",
         "species__common_name", "collector", "collection_location",
@@ -450,12 +466,13 @@ class SpecimenAdmin(ModelAdmin):
     fieldsets = (
         ("基本資料", {
             "fields": (
-                "catalog_number", "species", "specimen_type",
-                "basis_of_record",
+                "catalog_number", "taxon_group", "identification_status",
+                "species", "specimen_type", "basis_of_record",
             ),
             "description": (
-                "標示為必填（<b>物種</b>、<b>標本類型</b>）的欄位不可空白，"
-                "表單中以粗體標示。典藏編號留空會自動產生。"
+                "必填：<b>類群</b>、<b>標本類型</b>。尚未鑑定到種者，"
+                "<b>物種</b>可留空、待鑑定後補填（鑑定狀態預設「未鑑定」）。"
+                "典藏編號留空會自動產生。"
             ),
         }),
         ("標本製作與來源", {
@@ -524,17 +541,43 @@ class SpecimenAdmin(ModelAdmin):
             # Darwin Core eventDate 用 ISO 8601（YYYY-MM-DD）
             return value.isoformat() if value else ""
 
+        # 類群 → (class, order)：供 species 為空（未鑑定）時仍輸出較高分類階層
+        DWC_HIGHER = {
+            "bird": ("Aves", ""),
+            "insect": ("Insecta", ""),
+            "bat": ("Mammalia", "Chiroptera"),
+            "flying_squirrel": ("Mammalia", "Rodentia"),
+            "other": ("", ""),
+        }
+        # 鑑定狀態 → DwC taxonRank（僅可對應者）
+        RANK = {"to_family": "family", "to_genus": "genus", "to_species": "species"}
+
+        def sp_attr(s, attr):
+            # 未鑑定（無 species）時回傳空字串，不存取 None
+            return getattr(s.species, attr) if s.species_id else ""
+
+        def dwc_order(s):
+            # 有物種且已填「目」→ 用之；否則由類群推導（蝙蝠/飛鼠）
+            if s.species_id and s.species.order:
+                return s.species.order
+            return DWC_HIGHER.get(s.taxon_group, ("", ""))[1]
+
         # (DwC 欄名, 取值函式)
         columns = [
             ("occurrenceID", lambda s: s.catalog_number),
             ("basisOfRecord", lambda s: s.BASIS_OF_RECORD),
             # DwC preparations：標本的製作／保存方式（對應 preservation_method）
             ("preparations", lambda s: s.get_preservation_method_display() if s.preservation_method else ""),
-            ("scientificName", lambda s: s.species.scientific_name),
-            ("vernacularName", lambda s: s.species.common_name),
-            ("order", lambda s: s.species.order),
-            ("family", lambda s: s.species.family),
-            ("taxonID", lambda s: s.species.taicol_taxon_id),
+            # 較高分類：未鑑定時仍可由類群提供 kingdom/class（符合 DwC，可於 GBIF 高階匹配）
+            ("kingdom", lambda s: "Animalia"),
+            ("class", lambda s: DWC_HIGHER.get(s.taxon_group, ("", ""))[0]),
+            ("order", dwc_order),
+            ("family", lambda s: sp_attr(s, "family")),
+            ("scientificName", lambda s: sp_attr(s, "scientific_name")),
+            ("vernacularName", lambda s: sp_attr(s, "common_name")),
+            ("taxonID", lambda s: sp_attr(s, "taicol_taxon_id")),
+            ("taxonRank", lambda s: RANK.get(s.identification_status, "")),
+            ("identificationRemarks", lambda s: s.get_identification_status_display()),
             ("recordedBy", lambda s: s.collector),
             ("eventDate", lambda s: dwc_date(s.collection_date)),
             ("decimalLatitude", lambda s: s.latitude if s.latitude is not None else ""),
