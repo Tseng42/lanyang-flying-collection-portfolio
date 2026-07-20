@@ -26,6 +26,8 @@ class Species(models.Model):
         INSECT = "insect", "昆蟲"
         BAT = "bat", "蝙蝠"
         FLYING_SQUIRREL = "flying_squirrel", "飛鼠"
+        # 與 Specimen.TaxonGroup 對齊，供標本類群為「其他」時自動建立物種可對應
+        OTHER = "other", "其他"
 
     class ConservationStatus(models.TextChoices):
         # 依《野生動物保育法》公告之法定等級（由低到高）
@@ -89,6 +91,10 @@ class Species(models.Model):
     )
     # 最後更新時間：存檔時自動更新，供公開頁顯示「資料最後更新」與學術引用
     updated_at = models.DateTimeField("最後更新", auto_now=True)
+    is_auto_created = models.BooleanField(
+        "由標本建檔自動產生", default=False,
+        help_text="此筆物種資料由標本建檔時自動產生，請盡快補齊保育等級與分類資訊。",
+    )
 
     class Meta:
         verbose_name = "物種"

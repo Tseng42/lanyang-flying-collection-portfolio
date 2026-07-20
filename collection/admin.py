@@ -5,6 +5,8 @@
 """
 
 import csv
+import difflib
+import re
 
 from django import forms
 from django.contrib import admin, messages
@@ -26,6 +28,14 @@ from .models import (
     CATALOG_NUMBER_RE, Identification, Movement, Observation,
     ObservationImage, Species, SpeciesImage, Specimen, SpecimenImage,
 )
+
+
+def _county_of(text):
+    """從自由文字地點擷取到「縣／市」為止的縣市層級字串（供 DwC stateProvince）。"""
+    if not text:
+        return ""
+    m = re.search(r"^.*?[縣市]", text)
+    return m.group(0) if m else ""
 
 
 class AccessionYearFilter(admin.SimpleListFilter):
@@ -95,8 +105,27 @@ class CompletenessFilter(admin.SimpleListFilter):
 
 
 class SpecimenAdminForm(forms.ModelForm):
-    """標本表單：加入『可能重複』的二次確認防呆。"""
+    """標本表單：學名可自由輸入（比對既有物種，找不到則自動建立），並加入防呆確認。"""
 
+    # 學名以自由文字輸入取代原本的 species 下拉；species FK 於 save_model 解析設定
+    species_input = forms.CharField(
+        required=False,
+        label="學名",
+        help_text=(
+            "可直接輸入學名或中文俗名，輸入時會出現既有物種建議。"
+            "找不到既有物種時，儲存會自動建立一筆（保育等級預設「待查證」）。"
+            "尚未鑑定可留空。"
+        ),
+        widget=forms.TextInput(attrs={
+            "autocomplete": "off",
+            "data-species-autocomplete": "1",
+        }),
+    )
+    confirm_new_species = forms.BooleanField(
+        required=False,
+        label="確認新建物種",
+        help_text="輸入的學名與既有物種相似時，勾選此項可確認要新建一筆物種。",
+    )
     confirm_duplicate = forms.BooleanField(
         required=False,
         label="確認仍要存入（可能重複）",
@@ -110,9 +139,37 @@ class SpecimenAdminForm(forms.ModelForm):
         help_text="舊標本若含砷／汞防蟲劑請務必標記，保護操作人員。可複選；都不勾即代表「無」。",
     )
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 編輯既有標本時，以現有物種學名預填輸入框
+        if self.instance and self.instance.pk and self.instance.species_id:
+            self.fields["species_input"].initial = (
+                self.instance.species.scientific_name
+            )
+
+    @staticmethod
+    def _find_similar_species(raw, cutoff=0.85, n=3):
+        """用 difflib 找與輸入高度相似的既有物種（比對學名與中文名）。"""
+        candidates = {}
+        for s in Species.objects.all():
+            candidates[s.scientific_name.lower()] = s
+            if s.common_name:
+                candidates.setdefault(s.common_name.lower(), s)
+        close = difflib.get_close_matches(
+            raw.lower(), list(candidates.keys()), n=n, cutoff=cutoff
+        )
+        seen, result = set(), []
+        for key in close:
+            s = candidates[key]
+            if s.pk not in seen:
+                seen.add(s.pk)
+                result.append(s)
+        return result
+
     class Meta:
         model = Specimen
-        fields = "__all__"
+        # 排除 species：改由 species_input 輸入、save_model 解析設定
+        exclude = ("species",)
         # 中文說明文字（設在表單層，不更動資料模型）
         help_texts = {
             "catalog_number": (
@@ -151,10 +208,40 @@ class SpecimenAdminForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        species = cleaned.get("species")
         location = cleaned.get("collection_location")
         date = cleaned.get("collection_date")
         confirmed = cleaned.get("confirm_duplicate")
+
+        # ── 學名解析：自由輸入 → 既有物種或待自動建立 ──
+        raw = (cleaned.get("species_input") or "").strip()
+        self.resolved_species = None    # 比對到的既有物種
+        self.new_species_name = None    # 需自動建立的學名（無比對時）
+        if raw:
+            match = Species.objects.filter(
+                Q(scientific_name__iexact=raw) | Q(common_name__iexact=raw)
+            ).first()
+            if match:
+                self.resolved_species = match
+            elif not cleaned.get("confirm_new_species"):
+                # 高相似度提示（未勾確認則擋下）；同時列出學名與中文名
+                similar = self._find_similar_species(raw)
+                if similar:
+                    listed = "、".join(
+                        f"「{s.scientific_name}（{s.common_name or '無中文名'}）」"
+                        for s in similar
+                    )
+                    raise forms.ValidationError(
+                        f"輸入的學名「{raw}」與既有物種高度相似：{listed}。"
+                        "若其實是上述物種，請改填其學名；"
+                        "若確定為新物種、要新建一筆，請勾選下方「確認新建物種」後再送出。"
+                    )
+                self.new_species_name = raw
+            else:
+                self.new_species_name = raw
+        # raw 為空 → 未鑑定（resolved/new 皆 None）
+
+        # 供重複偵測使用（僅在比對到既有物種時才有意義）
+        species = self.resolved_species
 
         # ── 日期邏輯驗證（欄位皆選填，僅在相關兩者都有值時檢查）──
         collection_date = cleaned.get("collection_date")
@@ -280,7 +367,7 @@ class SpeciesAdmin(ModelAdmin):
         "common_name", "scientific_name_italic", "taxon_group",
         "conservation_status",
     )
-    list_filter = ("taxon_group", "conservation_status")
+    list_filter = ("taxon_group", "conservation_status", "is_auto_created")
     search_fields = ("common_name", "scientific_name")
     inlines = (SpeciesImageInline, SpecimenInline, ObservationInline)
 
@@ -410,8 +497,11 @@ class SpecimenAdmin(ModelAdmin):
     save_as = True
 
     class Media:
-        # 選好物種後自動建議典藏編號
-        js = ("collection/js/catalog_suggest.js",)
+        # 選好類群後自動建議典藏編號；學名欄位自由輸入 + 建議清單
+        js = (
+            "collection/js/catalog_suggest.js",
+            "collection/js/species_autocomplete.js",
+        )
 
     def get_urls(self):
         custom = [
@@ -420,8 +510,26 @@ class SpecimenAdmin(ModelAdmin):
                 self.admin_site.admin_view(self.suggest_catalog_view),
                 name="collection_specimen_suggest_catalog",
             ),
+            path(
+                "species-search/",
+                self.admin_site.admin_view(self.species_search_view),
+                name="collection_specimen_species_search",
+            ),
         ]
         return custom + super().get_urls()
+
+    def species_search_view(self, request):
+        """學名自由輸入時的建議清單：比對既有物種的學名或中文名。"""
+        q = (request.GET.get("q") or "").strip()
+        if not q:
+            return JsonResponse({"results": []})
+        qs = Species.objects.filter(
+            Q(scientific_name__icontains=q) | Q(common_name__icontains=q)
+        ).order_by("scientific_name")[:10]
+        return JsonResponse({"results": [
+            {"scientific_name": s.scientific_name, "common_name": s.common_name}
+            for s in qs
+        ]})
 
     def suggest_catalog_view(self, request):
         """回傳指定類群的下一個可用典藏編號（供表單自動建議）。
@@ -461,18 +569,17 @@ class SpecimenAdmin(ModelAdmin):
         "species__common_name", "collector", "collection_location",
     )
     date_hierarchy = "accession_date"
-    autocomplete_fields = ("species",)
 
     fieldsets = (
         ("基本資料", {
             "fields": (
                 "catalog_number", "taxon_group", "identification_status",
-                "species", "specimen_type", "basis_of_record",
+                "species_input", "specimen_type", "basis_of_record",
             ),
             "description": (
-                "必填：<b>類群</b>、<b>標本類型</b>。尚未鑑定到種者，"
-                "<b>物種</b>可留空、待鑑定後補填（鑑定狀態預設「未鑑定」）。"
-                "典藏編號留空會自動產生。"
+                "必填：<b>類群</b>、<b>標本類型</b>。<b>學名</b>可直接輸入："
+                "比對到既有物種即沿用，找不到會自動建立（保育等級「待查證」）；"
+                "尚未鑑定可留空、待鑑定後補填。典藏編號留空會自動產生。"
             ),
         }),
         ("標本製作與來源", {
@@ -510,8 +617,11 @@ class SpecimenAdmin(ModelAdmin):
         # 資料庫）。標本照片改由下方「標本影像」inline（SpecimenImage，可多張）管理。
         ("防呆確認", {
             "classes": ["collapse"],
-            "fields": ("confirm_duplicate",),
-            "description": "偵測到疑似重複標本時，才需要勾選此項再送出。",
+            "fields": ("confirm_new_species", "confirm_duplicate"),
+            "description": (
+                "學名與既有物種相似、或偵測到疑似重複標本時，"
+                "才需要勾選對應項目再送出。"
+            ),
         }),
     )
 
@@ -522,7 +632,40 @@ class SpecimenAdmin(ModelAdmin):
             readonly.append("catalog_number")
         return readonly
 
+    # 類群 → 可靠對應的「目」（僅蝙蝠/飛鼠可靠；其餘留空）
+    _ORDER_BY_GROUP = {"bat": "Chiroptera", "flying_squirrel": "Rodentia"}
+
+    def _auto_create_species(self, scientific_name, taxon_group):
+        """自動建立一筆物種：保育等級一律「待查證」、標記為自動產生。"""
+        valid_groups = {v for v, _ in Species.TaxonGroup.choices}
+        kwargs = {
+            "scientific_name": scientific_name,
+            "conservation_status": Species.ConservationStatus.UNVERIFIED,
+            "is_auto_created": True,
+            "taxon_group": (
+                taxon_group if taxon_group in valid_groups
+                else Species.TaxonGroup.OTHER
+            ),
+        }
+        order = self._ORDER_BY_GROUP.get(taxon_group)
+        if order:
+            kwargs["order"] = order
+        return Species.objects.create(**kwargs)
+
     def save_model(self, request, obj, form, change):
+        # 解析學名輸入：既有物種 → 沿用；無比對 → 自動建立；留空 → 未鑑定
+        if getattr(form, "new_species_name", None):
+            sp = self._auto_create_species(form.new_species_name, obj.taxon_group)
+            obj.species = sp
+            self.message_user(
+                request,
+                f"已自動建立物種「{sp.scientific_name}」（保育等級：待查證）。"
+                "請盡快至物種頁補齊保育等級與分類資訊。",
+                level=messages.WARNING,
+            )
+        else:
+            obj.species = getattr(form, "resolved_species", None)
+
         auto = not obj.catalog_number
         super().save_model(request, obj, form, change)
         if auto:
@@ -562,6 +705,15 @@ class SpecimenAdmin(ModelAdmin):
                 return s.species.order
             return DWC_HIGHER.get(s.taxon_group, ("", ""))[1]
 
+        WITHHELD_NOTE = "保育類物種位置資訊，依館方保育政策保留"
+
+        def is_withheld(s):
+            # 安全連鎖：species 未鑑定（None），或保育等級非「一般類」
+            # （含待查證／空白）→ 一律保守，精確經緯度留空。
+            if not s.species_id:
+                return True
+            return s.species.conservation_status != Species.ConservationStatus.GENERAL
+
         # (DwC 欄名, 取值函式)
         columns = [
             ("occurrenceID", lambda s: s.catalog_number),
@@ -580,8 +732,12 @@ class SpecimenAdmin(ModelAdmin):
             ("identificationRemarks", lambda s: s.get_identification_status_display()),
             ("recordedBy", lambda s: s.collector),
             ("eventDate", lambda s: dwc_date(s.collection_date)),
-            ("decimalLatitude", lambda s: s.latitude if s.latitude is not None else ""),
-            ("decimalLongitude", lambda s: s.longitude if s.longitude is not None else ""),
+            # 保育類／待查證／未鑑定：精確經緯度留空，並以 informationWithheld 說明原因；
+            # 仍輸出行政區層級地點（stateProvince 縣市、locality 縣市＋鄉鎮），保留地理價值。
+            ("decimalLatitude", lambda s: "" if is_withheld(s) else (s.latitude if s.latitude is not None else "")),
+            ("decimalLongitude", lambda s: "" if is_withheld(s) else (s.longitude if s.longitude is not None else "")),
+            ("informationWithheld", lambda s: WITHHELD_NOTE if is_withheld(s) else ""),
+            ("stateProvince", lambda s: _county_of(s.collection_location)),
             ("locality", lambda s: s.collection_location),
             ("identifiedBy", lambda s: s.identified_by),
             ("dateIdentified", lambda s: dwc_date(s.identified_date)),
