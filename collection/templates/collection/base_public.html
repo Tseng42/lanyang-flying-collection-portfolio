@@ -84,6 +84,9 @@
     .backlink:hover{ color:var(--gold-dk); }
     footer.site{ text-align:center; color:var(--muted); font-size:12px; padding:30px 20px;
                  letter-spacing:.5px; }
+    .site-foot-nav{ margin-bottom:8px; }
+    .site-foot-nav a{ color:var(--navy-2); font-size:13px; }
+    .site-foot-nav a:hover{ color:var(--gold-dk); }
 
     /* Hero（可置入特展主視覺背景圖；未放圖時優雅降級為深藍） */
     .hero{ position:relative; background-color:#12203a;
@@ -255,6 +258,11 @@
     {% block content %}{% endblock %}
   </div>
   {% endblock %}
-  <footer class="site">© 蘭陽博物館 飛行生物典藏系統</footer>
+  <footer class="site">
+    <nav class="site-foot-nav" aria-label="頁尾導覽">
+      <a href="{% url 'privacy' %}">隱私權政策</a>
+    </nav>
+    © 蘭陽博物館 飛行生物典藏系統
+  </footer>
 </body>
 </html>

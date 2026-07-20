@@ -139,6 +139,11 @@ def home(request):
     return render(request, "collection/home.html")
 
 
+def privacy_policy(request):
+    """隱私權政策頁（試營運草稿版）；內容為靜態轉檔，無需資料庫查詢。"""
+    return render(request, "collection/privacy.html")
+
+
 def _filtered_species(request):
     """依查詢參數過濾物種，回傳 (queryset, q, group, status)。列表與匯出共用。"""
     q = request.GET.get("q", "").strip()

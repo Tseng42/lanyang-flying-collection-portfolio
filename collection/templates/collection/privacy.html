@@ -1,0 +1,240 @@
+{% extends "collection/base_public.html" %}
+
+{% block title %}隱私權政策｜蘭陽博物館飛行生物典藏資料庫{% endblock %}
+
+{% block head_extra %}
+<style>
+  /* 隱私權政策頁：沿用全站色票與字型，僅限制內文寬度並補上表格／區塊樣式 */
+  .policy-doc{ max-width:760px; margin:0 auto; }
+  .policy-doc h1{ font-size:30px; margin-bottom:6px; }
+  .policy-doc h2{ font-family:var(--serif); font-size:21px; color:var(--navy-ink); font-weight:700;
+                  margin:38px 0 14px; border-left:4px solid var(--gold); padding-left:12px; }
+  .policy-doc h3{ font-family:var(--serif); font-size:17px; color:var(--navy-2); font-weight:700;
+                  margin:24px 0 8px; }
+  .policy-doc p{ margin:0 0 14px; color:#3a352d; }
+  .policy-doc ul{ margin:0 0 14px; padding-left:22px; }
+  .policy-doc li{ margin:5px 0; }
+  .policy-updated{ color:var(--muted); font-size:13px; margin:0 0 8px; }
+
+  /* 草稿提示橫幅：明顯但不干擾閱讀 */
+  .draft-banner{ display:flex; gap:10px; align-items:flex-start;
+                 background:#fbf6df; border:1px solid #e6cf8a; border-left:5px solid var(--gold);
+                 color:var(--gold-dk); border-radius:12px; padding:13px 16px; margin:0 0 26px;
+                 font-size:14px; line-height:1.7; }
+  .draft-banner .ico{ font-size:18px; line-height:1.5; }
+
+  /* 政策內文表格 */
+  .policy-doc table{ width:100%; border-collapse:collapse; margin:6px 0 18px;
+                     font-size:14px; background:var(--paper);
+                     border:1px solid var(--bd); border-radius:12px; overflow:hidden; }
+  .policy-doc caption{ text-align:left; font-size:13px; color:var(--muted);
+                       margin-bottom:6px; letter-spacing:.3px; }
+  .policy-doc th, .policy-doc td{ text-align:left; padding:10px 13px;
+                                  border-bottom:1px solid var(--bd); vertical-align:top; }
+  .policy-doc thead th{ background:var(--sand); color:var(--navy-ink); font-weight:700; }
+  .policy-doc tbody th{ background:#faf6ec; color:var(--navy-ink); font-weight:600;
+                        white-space:nowrap; }
+  .policy-doc tbody tr:last-child th, .policy-doc tbody tr:last-child td{ border-bottom:none; }
+  .policy-doc code{ font-family:"SFMono-Regular",Consolas,Menlo,monospace; font-size:13px;
+                    background:#eef2f7; padding:1px 6px; border-radius:5px; }
+
+  /* 說明／警語區塊（對應 md 的 blockquote） */
+  .policy-note{ background:#eef2f7; border-left:4px solid var(--navy-2); border-radius:8px;
+                padding:12px 16px; margin:0 0 16px; color:#33405a; font-size:14px; line-height:1.75; }
+  .policy-note.warn{ background:#fbeae8; border-left-color:var(--c-endangered); color:#7a2019; }
+  .policy-note strong{ color:inherit; }
+
+  /* 待補事項清單：明顯視覺區隔，一眼看出尚未完成 */
+  .todo-block{ background:#fff8e6; border:2px dashed #d9a441; border-radius:14px;
+               padding:18px 20px; margin:14px 0 8px; }
+  .todo-block .todo-flag{ display:inline-block; background:var(--gold); color:#fff;
+                          font-size:12px; font-weight:700; letter-spacing:.5px;
+                          border-radius:999px; padding:3px 12px; margin-bottom:10px; }
+  .todo-list{ list-style:none; padding-left:0; margin:6px 0 0; }
+  .todo-list li{ position:relative; padding-left:30px; margin:8px 0; color:#5a4a25; }
+  .todo-list li::before{ content:"☐"; position:absolute; left:2px; top:-1px;
+                         font-size:18px; color:var(--gold-dk); }
+
+  @media (max-width:640px){
+    .policy-doc h1{ font-size:24px; }
+    /* 表格在窄螢幕可橫向捲動，避免擠壓 */
+    .policy-doc table{ display:block; overflow-x:auto; white-space:normal; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<article class="policy-doc">
+  <a class="backlink" href="{% url 'home' %}">← 回首頁</a>
+
+  <!-- 草稿提示橫幅（頁面附加說明，非政策內文） -->
+  <div class="draft-banner" role="note">
+    <span class="ico" aria-hidden="true">⚠️</span>
+    <span>本頁為試營運版本，內容尚未經館方審核，正式發布前將另行更新。</span>
+  </div>
+
+  <h1>隱私權與資料使用政策</h1>
+  <p class="policy-updated">最後更新：2026-07-20</p>
+
+  <div class="policy-note">
+    <strong>狀態：草稿（個人專案版）</strong><br>
+    本版本適用於本系統交付館方前之測試與試營運階段。正式以蘭陽博物館名義發布前，須經館方權責單位審核，並依館方既有隱私權政策格式調整。
+  </div>
+
+  <h2>一、前言</h2>
+  <p>本系統為「蘭陽博物館飛行生物標本典藏資料庫」（以下簡稱本系統）之公開查詢介面，提供飛行生物標本、物種與觀察紀錄之檢索服務。</p>
+  <p>我們重視您的隱私。本政策說明本系統蒐集哪些資料、如何使用，以及您享有的權利。本政策依《個人資料保護法》相關規定訂定。</p>
+
+  <h2>二、我們蒐集哪些資料</h2>
+  <p>本系統對一般訪客蒐集的資料極為有限。</p>
+
+  <h3>2.1 您主動提供的資料</h3>
+  <p><strong>一般訪客：</strong> 本系統目前<strong>不設置任何需要填寫個人資料的表單</strong>，您無須註冊或登入即可使用全部公開查詢功能。</p>
+  <p><strong>館內使用者：</strong> 具有帳號之館內工作人員，本系統會保存其帳號名稱、電子郵件位址、密碼（以不可逆之雜湊方式儲存，本系統無法還原為原始密碼）、權限層級，以及資料異動紀錄（包含操作者、操作時間與異動內容）。</p>
+
+  <h3>2.2 系統自動記錄的資料</h3>
+  <p>當您瀏覽本系統時，伺服器會自動記錄下列技術性資料：</p>
+  <table>
+    <caption>系統自動記錄的技術性資料</caption>
+    <thead>
+      <tr><th scope="col">項目</th><th scope="col">內容</th></tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row">連線來源</th><td>IP 位址</td></tr>
+      <tr><th scope="row">瀏覽行為</th><td>造訪時間、瀏覽頁面路徑、HTTP 狀態碼</td></tr>
+      <tr><th scope="row">裝置資訊</th><td>瀏覽器類型與版本、作業系統</td></tr>
+      <tr><th scope="row">來源頁面</th><td>連結至本系統的前一頁網址</td></tr>
+    </tbody>
+  </table>
+  <p>這些紀錄用於系統維運、錯誤排除與異常存取偵測，<strong>不會用於分析個別使用者行為，亦不會與任何身分資料連結</strong>。</p>
+
+  <h3>2.3 Cookie</h3>
+  <p>本系統使用下列必要性 Cookie，均不用於廣告或跨站追蹤：</p>
+  <table>
+    <caption>本系統使用的必要性 Cookie</caption>
+    <thead>
+      <tr><th scope="col">Cookie</th><th scope="col">用途</th><th scope="col">對象</th></tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row"><code>sessionid</code></th><td>維持館內使用者登入狀態</td><td>僅登入者</td></tr>
+      <tr><th scope="row"><code>csrftoken</code></th><td>防止跨站請求偽造攻擊，保護表單安全</td><td>全部訪客</td></tr>
+    </tbody>
+  </table>
+  <p>您可透過瀏覽器設定拒絕 Cookie，但可能影響登入功能之正常運作。</p>
+
+  <h3>2.4 本系統「沒有」做的事</h3>
+  <p>為避免疑慮，特此明確聲明本系統：</p>
+  <ul>
+    <li><strong>未安裝</strong> Google Analytics 或任何第三方流量分析工具</li>
+    <li><strong>未使用</strong> 廣告追蹤器、像素標籤或跨站追蹤技術</li>
+    <li><strong>不會</strong> 將任何資料出售、出租或交換予第三方</li>
+    <li><strong>不會</strong> 主動蒐集訪客之姓名、聯絡方式或其他可識別個人之資料</li>
+  </ul>
+
+  <h2>三、資料如何使用</h2>
+  <table>
+    <caption>各類資料的使用目的</caption>
+    <thead>
+      <tr><th scope="col">資料類型</th><th scope="col">使用目的</th></tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row">系統存取紀錄</th><td>系統維運、資安監控、錯誤排除</td></tr>
+      <tr><th scope="row">館內使用者帳號</th><td>身分驗證、權限控管、典藏作業稽核</td></tr>
+      <tr><th scope="row">資料異動紀錄</th><td>確保典藏資料之可追溯性，符合博物館典藏管理實務</td></tr>
+    </tbody>
+  </table>
+  <p>本系統不會將上述資料用於前述目的以外之用途。</p>
+
+  <h2>四、保育類物種資料之特別處理</h2>
+  <p>考量野生動物保育需求，本系統對敏感資料採取下列保護措施：</p>
+  <ol>
+    <li><strong>座標模糊化</strong>　依《野生動物保育法》公告之保育類野生動物，其觀察與採集地點座標於公開介面一律模糊化至<strong>縣市層級</strong>，不揭露精確位置。</li>
+    <li><strong>分級檢視</strong>　完整之地理資訊僅提供經審核之研究人員於登入後查閱，並留存查閱紀錄。</li>
+    <li><strong>影像控管</strong>　可能揭露特定棲地位置之影像，於公開介面不予顯示。</li>
+    <li><strong>研究用途申請</strong>　研究人員如需取得精確地理資料，請依第八節聯絡方式提出申請，並說明研究目的與資料使用範圍。</li>
+  </ol>
+  <div class="policy-note warn">
+    <strong>⚠️ 技術限制之誠實揭露</strong><br>
+    本系統影像檔案託管於第三方雲端服務，影像檔案網址本身無存取控制。標記為「不公開」之影像僅代表不會出現於公開頁面，若第三人取得該檔案網址仍可能存取。基於此限制，涉及高度敏感棲地資訊之影像不應上傳至本系統。
+  </div>
+
+  <h2>五、資料保存與安全</h2>
+  <p><strong>保存期間</strong></p>
+  <table>
+    <caption>各類資料的保存期間</caption>
+    <thead>
+      <tr><th scope="col">資料類型</th><th scope="col">保存期間</th></tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row">伺服器存取紀錄</th><td>依託管服務商政策，通常為短期保存</td></tr>
+      <tr><th scope="row">館內使用者帳號</th><td>至該人員離職或申請刪除為止</td></tr>
+      <tr><th scope="row">典藏資料與異動紀錄</th><td>永久保存（屬博物館典藏管理紀錄）</td></tr>
+    </tbody>
+  </table>
+  <p><strong>安全措施</strong></p>
+  <ul>
+    <li>全站採用 HTTPS 加密傳輸</li>
+    <li>密碼以單向雜湊演算法儲存</li>
+    <li>依職務設置分級存取權限</li>
+    <li>資料異動全程留存紀錄</li>
+  </ul>
+  <p>惟須說明，網際網路傳輸與電子儲存無法保證絕對安全，本系統採取合理之保護措施，但無法承諾絕對之資料安全。</p>
+
+  <h2>六、第三方服務</h2>
+  <p>本系統使用下列第三方服務，各該服務商之資料處理行為適用其自身隱私權政策：</p>
+  <table>
+    <caption>本系統使用的第三方服務</caption>
+    <thead>
+      <tr><th scope="col">服務商</th><th scope="col">用途</th><th scope="col">資料所在地</th></tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row">Render</th><td>網站與資料庫託管</td><td>〔待補：確認伺服器區域〕</td></tr>
+      <tr><th scope="row">Cloudinary</th><td>影像檔案儲存與傳遞</td><td>〔待補：確認儲存區域〕</td></tr>
+    </tbody>
+  </table>
+  <div class="policy-note warn">
+    ⚠️ 上述服務之伺服器可能位於中華民國境外，資料將涉及國際傳輸。使用本系統即表示您瞭解並同意此情形。
+  </div>
+
+  <h2>七、您的權利</h2>
+  <p>依《個人資料保護法》第三條，您就本系統保有之您的個人資料，得行使下列權利：</p>
+  <ul>
+    <li>查詢或請求閱覽</li>
+    <li>請求製給複製本</li>
+    <li>請求補充或更正</li>
+    <li>請求停止蒐集、處理或利用</li>
+    <li>請求刪除</li>
+  </ul>
+  <p>如欲行使上述權利，請依第八節之聯絡方式與我們聯繫。我們將於收到請求後儘速處理。</p>
+  <div class="policy-note">
+    📌 針對一般訪客：由於本系統不蒐集可識別個人身分之資料，實務上通常無可供查詢或刪除之個人資料。
+  </div>
+
+  <h2>八、聯絡方式</h2>
+  <p>如對本政策有任何疑問，或欲行使前述權利，請聯繫：</p>
+  <p>
+    〔待補：聯絡窗口名稱〕<br>
+    〔待補：電子郵件〕<br>
+    〔待補：聯絡電話〕<br>
+    〔待補：通訊地址〕
+  </p>
+
+  <h2>九、政策修訂</h2>
+  <p>本政策如有修訂，將於本頁公告並更新「最後更新日期」。重大變更時，將於系統首頁另行提示。</p>
+
+  <h2>十、待補事項清單</h2>
+  <div class="todo-block" role="group" aria-label="待補事項清單（尚未完成）">
+    <span class="todo-flag">尚未完成</span>
+    <div class="policy-note" style="margin-bottom:12px;">以下項目須於正式發布前補齊，發布時請刪除本節。</div>
+    <ul class="todo-list">
+      <li>確認館方是否已有既有之隱私權政策，本政策應與之一致而非另立</li>
+      <li>補齊第八節聯絡窗口資訊</li>
+      <li>確認 Render 與 Cloudinary 之伺服器所在區域</li>
+      <li>確認本系統是否須納入館方個資檔案安全維護計畫</li>
+      <li>確認資料保存期限是否需符合檔案法或館方典藏規章之規定</li>
+      <li>經館方權責單位（如秘書室、資訊單位或法制窗口）審核</li>
+      <li>確認是否需同時提供無障礙版本與英文版本</li>
+    </ul>
+  </div>
+</article>
+{% endblock %}
