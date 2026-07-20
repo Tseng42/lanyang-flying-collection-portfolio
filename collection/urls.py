@@ -23,4 +23,6 @@ urlpatterns = [
         views.public_species_detail,
         name="public_species_detail",
     ),
+    # 暫時性 Cloudinary 診斷端點（除錯完成後移除）
+    path("debug-cloudinary/", views.debug_cloudinary, name="debug_cloudinary"),
 ]
