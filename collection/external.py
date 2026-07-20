@@ -8,7 +8,7 @@ eBird 無免登入的學名深連結，故鳥類改用同屬 Cornell 生態系�
 查詢的 Macaulay Library。
 """
 
-from urllib.parse import quote
+from urllib.parse import quote, quote_plus
 
 from .models import Species
 
@@ -41,6 +41,26 @@ def species_external_links(species):
             "label": "TBIA 生物多樣性資料共通查詢",
             "url": "https://tbiadata.tw/zh-hant/search/occurrence",
             "note": "跨機構出現紀錄查詢",
+        })
+
+    # iNaturalist：有 taxon_id 直連物種頁；否則以學名查台灣（place_id=7887）
+    # 的觀察紀錄；學名為空則不顯示此連結。
+    inat_note = "公民科學平台，影像多為 CC 授權，使用前請確認個別授權條款"
+    if species.inaturalist_taxon_id:
+        links.append({
+            "label": "iNaturalist 觀察紀錄",
+            "url": f"https://www.inaturalist.org/taxa/{species.inaturalist_taxon_id}",
+            "note": inat_note,
+        })
+    elif species.scientific_name:
+        # quote_plus：空格轉為 +，其餘字元做 URL encode
+        links.append({
+            "label": "iNaturalist 觀察紀錄",
+            "url": (
+                "https://www.inaturalist.org/observations?place_id=7887"
+                f"&taxon_name={quote_plus(species.scientific_name)}"
+            ),
+            "note": inat_note,
         })
     return links
 

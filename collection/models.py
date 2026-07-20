@@ -53,6 +53,10 @@ class Species(models.Model):
     taicol_taxon_id = models.CharField(
         "TaiCOL 物種編號", max_length=50, blank=True, default="",
     )
+    inaturalist_taxon_id = models.CharField(
+        "iNaturalist Taxon ID", max_length=20, blank=True, default="",
+        help_text="填入後將直接連往該物種頁面；留白則以學名查詢台灣觀察紀錄。",
+    )
     taxon_group = models.CharField(
         "分類群", max_length=20, choices=TaxonGroup.choices,
     )
