@@ -390,3 +390,105 @@ class Identification(models.Model):
 
     def __str__(self):
         return f"{self.specimen_id}｜{self.identified_as}｜{self.identified_date}"
+
+
+class BaseMediaImage(models.Model):
+    """物種／觀察紀錄影像的共用欄位與行為（抽象基底）。
+
+    SpeciesImage 與 ObservationImage 結構一致、僅外鍵不同，故共用此基底；
+    既有的 SpecimenImage 不繼承此類，結構完全不受影響。
+    影像檔沿用專案設定的 default storage（線上為 Cloudinary）。
+    """
+
+    # 活體／野外情境的影像類型（與標本用的 SpecimenImage.ImageType 不同）
+    class ImageType(models.TextChoices):
+        LIVE = "live", "生態照"
+        DETAIL = "detail", "細節特徵"
+        HABITAT = "habitat", "棲地環境"
+        OTHER = "other", "其他"
+
+    class License(models.TextChoices):
+        MUSEUM = "museum", "館方自攝"
+        CC0 = "cc0", "CC0"
+        CC_BY = "cc_by", "CC BY"
+        CC_BY_NC = "cc_by_nc", "CC BY-NC"
+        CC_BY_SA = "cc_by_sa", "CC BY-SA"
+        OTHER = "other", "其他授權"
+        UNVERIFIED = "unverified", "未確認"
+
+    # 子類別指定「判定同一主體」所用的外鍵欄位名（save() 據此確保唯一主要影像）
+    parent_field = None
+
+    image_type = models.CharField(
+        "影像類型", max_length=20, choices=ImageType.choices,
+    )
+    is_primary = models.BooleanField(
+        "主要影像", default=False,
+        help_text="勾選後會顯示於檢索結果與詳細頁。",
+    )
+    is_public = models.BooleanField(
+        "對外公開", default=True,
+        help_text="取消勾選則僅限館內人員檢視。",
+    )
+    photographer = models.CharField("攝影者", max_length=100, blank=True)
+    license = models.CharField(
+        "授權方式", max_length=20,
+        choices=License.choices, default=License.UNVERIFIED,
+    )
+    license_note = models.CharField(
+        "授權備註", max_length=200, blank=True,
+        help_text="選擇「其他授權」時請填寫授權來源與範圍。",
+    )
+    caption = models.CharField("說明", max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        abstract = True
+        ordering = ["-is_primary", "created_at"]
+
+    def save(self, *args, **kwargs):
+        """確保同一主體最多一張主要影像：本筆勾選 is_primary 時，取消其餘。"""
+        super().save(*args, **kwargs)
+        if self.is_primary:
+            parent_id_field = f"{self.parent_field}_id"
+            type(self).objects.filter(
+                **{parent_id_field: getattr(self, parent_id_field)}
+            ).exclude(pk=self.pk).update(is_primary=False)
+
+
+class SpeciesImage(BaseMediaImage):
+    """物種影像表 — 一個物種可有多張代表照片。"""
+
+    parent_field = "species"
+
+    species = models.ForeignKey(
+        Species, on_delete=models.CASCADE,
+        related_name="images", verbose_name="物種",
+    )
+    image = models.ImageField("影像檔", upload_to="species_images/")
+
+    class Meta(BaseMediaImage.Meta):
+        verbose_name = "物種影像"
+        verbose_name_plural = "物種影像"
+
+    def __str__(self):
+        return f"{self.species}｜{self.get_image_type_display()}"
+
+
+class ObservationImage(BaseMediaImage):
+    """觀察紀錄影像表 — 一筆觀察紀錄可有多張現場照片。"""
+
+    parent_field = "observation"
+
+    observation = models.ForeignKey(
+        Observation, on_delete=models.CASCADE,
+        related_name="images", verbose_name="觀察紀錄",
+    )
+    image = models.ImageField("影像檔", upload_to="observation_images/")
+
+    class Meta(BaseMediaImage.Meta):
+        verbose_name = "觀察紀錄影像"
+        verbose_name_plural = "觀察紀錄影像"
+
+    def __str__(self):
+        return f"{self.observation_id}｜{self.get_image_type_display()}"

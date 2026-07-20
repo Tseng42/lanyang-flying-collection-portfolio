@@ -23,8 +23,8 @@ from unfold.forms import (
 )
 
 from .models import (
-    CATALOG_NUMBER_RE, Identification, Movement, Observation, Species,
-    Specimen, SpecimenImage,
+    CATALOG_NUMBER_RE, Identification, Movement, Observation,
+    ObservationImage, Species, SpeciesImage, Specimen, SpecimenImage,
 )
 
 
@@ -191,6 +191,46 @@ class ObservationInline(TabularInline):
     show_change_link = True
 
 
+class SpeciesImageInline(TabularInline):
+    """在物種頁面內嵌顯示其代表照片（比照標本影像 inline，含預覽縮圖）。"""
+
+    model = SpeciesImage
+    extra = 0
+    fields = (
+        "image", "thumbnail", "image_type", "is_primary", "is_public",
+        "photographer", "license", "license_note", "caption",
+    )
+    readonly_fields = ("thumbnail",)
+
+    @admin.display(description="預覽")
+    def thumbnail(self, obj):
+        if obj.image:
+            return format_html(
+                '<img src="{}" style="max-height:80px;" />', obj.image.url,
+            )
+        return "—"
+
+
+class ObservationImageInline(TabularInline):
+    """在觀察紀錄頁面內嵌顯示其現場照片（比照標本影像 inline，含預覽縮圖）。"""
+
+    model = ObservationImage
+    extra = 0
+    fields = (
+        "image", "thumbnail", "image_type", "is_primary", "is_public",
+        "photographer", "license", "license_note", "caption",
+    )
+    readonly_fields = ("thumbnail",)
+
+    @admin.display(description="預覽")
+    def thumbnail(self, obj):
+        if obj.image:
+            return format_html(
+                '<img src="{}" style="max-height:80px;" />', obj.image.url,
+            )
+        return "—"
+
+
 class SpeciesAdminForm(forms.ModelForm):
     """物種表單：補上中文說明（設在表單層，不更動資料模型）。"""
 
@@ -220,7 +260,7 @@ class SpeciesAdmin(ModelAdmin):
     )
     list_filter = ("taxon_group",)
     search_fields = ("common_name", "scientific_name")
-    inlines = (SpecimenInline, ObservationInline)
+    inlines = (SpeciesImageInline, SpecimenInline, ObservationInline)
 
     @admin.display(description="學名", ordering="scientific_name")
     def scientific_name_italic(self, obj):
@@ -479,6 +519,7 @@ class ObservationAdmin(ModelAdmin):
     date_hierarchy = "observation_date"
     autocomplete_fields = ("species",)
     readonly_fields = ("basis_of_record",)
+    inlines = (ObservationImageInline,)
 
     fieldsets = (
         ("基本資訊", {
