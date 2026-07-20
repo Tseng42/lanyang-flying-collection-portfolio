@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 import dj_database_url
@@ -208,6 +209,42 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# Logging
+# 正式環境（DEBUG=False）Django 預設不會把未捕捉例外的 Traceback 印到 stdout，
+# 導致 Render Logs 只看得到 HTTP 存取紀錄。以下明確設定 console handler 輸出到
+# sys.stdout，讓 500 錯誤的完整 Traceback 出現在 Render Logs。
+# 此設定不受 DEBUG 影響，DEBUG=False 時同樣生效。
+LOGGING = {
+    'version': 1,
+    # 保留 Django 內建 logger，避免關掉既有紀錄
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'stream': sys.stdout,
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            # 避免與上層 'django' logger 重複輸出
+            'propagate': False,
+        },
+        # 觀察 Cloudinary 上傳過程（含請求細節）
+        'cloudinary': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+}
 
 
 # django-unfold 後台外觀設定
