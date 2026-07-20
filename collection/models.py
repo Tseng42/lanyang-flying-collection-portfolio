@@ -228,6 +228,7 @@ class Specimen(models.Model):
 
     image = models.ImageField(
         "標本影像", upload_to="specimens/", null=True, blank=True,
+        help_text="已停用，請改用『標本影像』（可上傳多張的標本影像表）。",
     )
 
     # 狀態與危害
@@ -425,11 +426,22 @@ class Movement(models.Model):
 class SpecimenImage(models.Model):
     """標本影像表 — 一件標本可有多張照片。"""
 
+    # 標本專用影像類型（保留原有語意，不與 BaseMediaImage 的生態照/棲地混用）
     class ImageType(models.TextChoices):
         BODY = "body", "標本本體"
         LABEL = "label", "原始標籤"
         DETAIL = "detail", "細節"
         OTHER = "other", "其他"
+
+    # 授權方式：與 SpeciesImage（BaseMediaImage.License）完全一致
+    class License(models.TextChoices):
+        MUSEUM = "museum", "館方自攝"
+        CC0 = "cc0", "CC0"
+        CC_BY = "cc_by", "CC BY"
+        CC_BY_NC = "cc_by_nc", "CC BY-NC"
+        CC_BY_SA = "cc_by_sa", "CC BY-SA"
+        OTHER = "other", "其他授權"
+        UNVERIFIED = "unverified", "未確認"
 
     specimen = models.ForeignKey(
         Specimen, on_delete=models.CASCADE,
@@ -440,11 +452,37 @@ class SpecimenImage(models.Model):
         "影像類型", max_length=20, choices=ImageType.choices,
     )
     caption = models.CharField("說明", max_length=300, blank=True)
+    # 以下欄位比照 SpeciesImage/ObservationImage 補齊（公開展示與授權控管用）
+    is_public = models.BooleanField(
+        "對外公開", default=True,
+        help_text="取消勾選則僅限館內人員檢視。",
+    )
+    is_primary = models.BooleanField(
+        "主要影像", default=False,
+        help_text="勾選後會顯示於檢索結果與詳細頁。",
+    )
+    photographer = models.CharField("攝影者", max_length=100, blank=True)
+    license = models.CharField(
+        "授權方式", max_length=20,
+        choices=License.choices, default=License.UNVERIFIED, blank=True,
+    )
+    license_note = models.CharField(
+        "授權備註", max_length=200, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name = "標本影像"
         verbose_name_plural = "標本影像"
-        ordering = ["id"]
+        ordering = ["-is_primary", "created_at"]
+
+    def save(self, *args, **kwargs):
+        """確保同一標本最多一張主要影像：本筆勾選 is_primary 時，取消其餘。"""
+        super().save(*args, **kwargs)
+        if self.is_primary:
+            SpecimenImage.objects.filter(
+                specimen_id=self.specimen_id
+            ).exclude(pk=self.pk).update(is_primary=False)
 
     def __str__(self):
         return f"{self.specimen_id}｜{self.get_image_type_display()}"

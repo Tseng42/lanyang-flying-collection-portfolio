@@ -305,7 +305,10 @@ class SpecimenImageInline(TabularInline):
 
     model = SpecimenImage
     extra = 0
-    fields = ("image", "thumbnail", "image_type", "caption")
+    fields = (
+        "image", "thumbnail", "image_type", "is_primary", "is_public",
+        "photographer", "license", "license_note", "caption",
+    )
     readonly_fields = ("thumbnail",)
 
     @admin.display(description="預覽")
@@ -415,10 +418,8 @@ class SpecimenAdmin(ModelAdmin):
             "classes": ["collapse"],
             "fields": ("identified_by", "identified_date", "remarks"),
         }),
-        ("影像", {
-            "classes": ["collapse"],
-            "fields": ("image", "image_preview"),
-        }),
+        # 「影像」fieldset 已移除：Specimen.image 停用、撤下表單（欄位仍保留於
+        # 資料庫）。標本照片改由下方「標本影像」inline（SpecimenImage，可多張）管理。
         ("防呆確認", {
             "classes": ["collapse"],
             "fields": ("confirm_duplicate",),
@@ -427,7 +428,7 @@ class SpecimenAdmin(ModelAdmin):
     )
 
     def get_readonly_fields(self, request, obj=None):
-        readonly = ["basis_of_record", "image_preview"]
+        readonly = ["basis_of_record"]
         if obj is not None:
             # 編輯既有標本時鎖定典藏編號（主鍵），避免改動造成關聯錯亂
             readonly.append("catalog_number")
