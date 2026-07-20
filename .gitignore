@@ -9,6 +9,7 @@ secrets.*
 # ---- 資料庫（含備份）----
 db.sqlite3
 db.sqlite3-journal
+*.sqlite3
 backups/
 
 # ---- 使用者上傳的媒體檔 ----

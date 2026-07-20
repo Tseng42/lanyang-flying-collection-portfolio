@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 from django.templatetags.static import static
 from django.urls import reverse_lazy
 
@@ -25,15 +26,23 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-# 正式上線請以環境變數 DJANGO_SECRET_KEY 提供長且隨機的金鑰。
-SECRET_KEY = os.environ.get(
-    'DJANGO_SECRET_KEY',
-    'django-insecure-q%johglh1j5fgj0dgl3tfy5cdr)hzyj1(g5j22qd1e(8*6&xv2',
-)
-
 # 預設關閉 DEBUG（正式模式）；開發時設環境變數 DJANGO_DEBUG=True 開啟。
 DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
+
+# SECURITY WARNING: keep the secret key used in production secret!
+# SECRET_KEY 一律優先由環境變數 DJANGO_SECRET_KEY 提供：
+# - 正式環境（DEBUG=False）未設定 → 直接 raise，絕不靜默使用預設值
+#   （舊的硬編碼 fallback 已存在於公開 git 歷史，繼續沿用並不安全）。
+# - 本機開發（DEBUG=True）未設定 → 使用明確標示「僅供開發」的暫時金鑰。
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'django-insecure-dev-only-not-for-production'
+    else:
+        raise ImproperlyConfigured(
+            '未設定環境變數 DJANGO_SECRET_KEY。正式環境必須提供一組長且隨機的'
+            '金鑰；請在 Render 的 Environment 設定 DJANGO_SECRET_KEY 後再啟動。'
+        )
 
 # 允許的主機（逗號分隔）；正式上線請把實際網域加進 DJANGO_ALLOWED_HOSTS。
 ALLOWED_HOSTS = [
