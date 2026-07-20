@@ -65,9 +65,10 @@
     <div class="img-gallery">
       {% for im in images %}
         <figure class="img-cell">
-          <a class="img-zoom" href="#lb-p-{{ forloop.counter }}">
+          <button type="button" class="img-zoom" data-full="{{ im.full }}" data-alt="{{ im.alt }}"
+                  aria-label="放大檢視：{{ im.alt }}">
             <img src="{{ im.thumb }}" alt="{{ im.alt }}" loading="lazy">
-          </a>
+          </button>
           <figcaption>
             {% if im.caption %}<div class="cap">{{ im.caption }}</div>{% endif %}
             <div class="meta">
@@ -76,10 +77,6 @@
               {% if im.license_note %}<span class="note">授權說明：{{ im.license_note }}</span>{% endif %}
             </div>
           </figcaption>
-          <!-- 純 CSS lightbox：點縮圖開啟，點遮罩關閉 -->
-          <a href="#_" class="lightbox" id="lb-p-{{ forloop.counter }}">
-            <img src="{{ im.full }}" alt="{{ im.alt }}">
-          </a>
         </figure>
       {% endfor %}
     </div>
@@ -100,9 +97,10 @@
       <div class="img-gallery">
         {% for im in research_images %}
           <figure class="img-cell">
-            <a class="img-zoom" href="#lb-r-{{ forloop.counter }}">
+            <button type="button" class="img-zoom" data-full="{{ im.full }}" data-alt="{{ im.alt }}"
+                    aria-label="放大檢視：{{ im.alt }}">
               <img src="{{ im.thumb }}" alt="{{ im.alt }}" loading="lazy">
-            </a>
+            </button>
             <figcaption>
               <span class="priv-badge">未公開</span>
               {% if im.caption %}<div class="cap">{{ im.caption }}</div>{% endif %}
@@ -112,9 +110,6 @@
                 {% if im.license_note %}<span class="note">授權說明：{{ im.license_note }}</span>{% endif %}
               </div>
             </figcaption>
-            <a href="#_" class="lightbox" id="lb-r-{{ forloop.counter }}">
-              <img src="{{ im.full }}" alt="{{ im.alt }}">
-            </a>
           </figure>
         {% endfor %}
       </div>
@@ -151,7 +146,7 @@
       </div>
     {% empty %}
       <div class="panel empty-state" style="padding:30px 22px;">
-        <div class="ico" style="font-size:34px;">📦</div>
+        <div class="ico" style="font-size:34px;" aria-hidden="true">📦</div>
         <div class="t" style="font-size:17px;">本館目前無此物種標本</div>
       </div>
     {% endfor %}
@@ -171,6 +166,34 @@
   <div style="margin-top:16px; padding-top:12px; border-top:1px solid var(--bd);
        font-size:12px; color:var(--muted);">
     資料來源：蘭陽博物館 飛行生物特展典藏系統</div>
+
+  <!-- 影像放大檢視：原生 <dialog>，提供 Esc 關閉、焦點鎖定，關閉後焦點自動回觸發鈕 -->
+  <dialog id="lightbox" class="lightbox" aria-label="影像放大檢視">
+    <div class="lightbox-inner">
+      <img id="lightbox-img" src="" alt="">
+      <button type="button" class="lightbox-close" aria-label="關閉放大檢視">✕</button>
+    </div>
+  </dialog>
+
+  <script>
+    // Lightbox：以原生 <dialog> 實作，鍵盤可開啟（Enter/Space 觸發鈕）與關閉（Esc）
+    (function(){
+      var dlg = document.getElementById('lightbox');
+      if (!dlg || typeof dlg.showModal !== 'function') return;   // 舊瀏覽器則保留可下載縮圖，優雅降級
+      var dimg = document.getElementById('lightbox-img');
+      document.querySelectorAll('.img-zoom').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          dimg.src = btn.getAttribute('data-full');
+          dimg.alt = btn.getAttribute('data-alt') || '';
+          dlg.showModal();   // 焦點自動移入 dialog；關閉時瀏覽器會把焦點還給此按鈕
+        });
+      });
+      // 點背景（dialog 本體，非內容）即關閉
+      dlg.addEventListener('click', function(e){ if (e.target === dlg) dlg.close(); });
+      dlg.querySelector('.lightbox-close').addEventListener('click', function(){ dlg.close(); });
+      dlg.addEventListener('close', function(){ dimg.src = ''; });   // 釋放圖片
+    })();
+  </script>
 
   <script>
     (function(){

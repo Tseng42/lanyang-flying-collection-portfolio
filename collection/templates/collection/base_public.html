@@ -13,12 +13,13 @@
       /* 主色：深藍；底：米白；點綴：金銅／大地色（小面積） */
       --navy:#1b2b4a; --navy-2:#294a75; --navy-ink:#14223c;
       --cream:#f6f1e7; --paper:#fffdf9; --sand:#efe7d5; --bd:#e6ddca;
-      --ink:#282420; --muted:#726a5c;
+      --ink:#282420; --muted:#635b50;   /* 無障礙：加深至小字於米底 ≥4.5:1 */
       --gold:#b08643; --gold-dk:#8a6631; --bronze:#9c6f3f;
+      /* 保育等級：僅加深文字色階達對比，底色與色系不變 */
       --c-endangered:#b3261e; --c-endangered-bg:#fbeae8;
-      --c-rare:#c9701a; --c-rare-bg:#fdf0e2;
-      --c-other:#b9971f; --c-other-bg:#fbf6df;
-      --c-general:#8a8a8a; --c-general-bg:#edeff0;
+      --c-rare:#9c5613; --c-rare-bg:#fdf0e2;
+      --c-other:#8a6631; --c-other-bg:#fbf6df;
+      --c-general:#666666; --c-general-bg:#edeff0;
       --serif:"Noto Serif TC","Songti TC","Microsoft JhengHei",Georgia,serif;
       --shadow:0 12px 30px -12px rgba(20,34,60,.22);
       --ease:cubic-bezier(.2,.7,.2,1);
@@ -31,6 +32,19 @@
     img{ max-width:100%; height:auto; }
     a{ color:var(--navy-2); text-decoration:none; transition:color .2s ease; }
     a:hover{ color:var(--gold-dk); }
+
+    /* 跳至主要內容：平時移出畫面（非 display:none，螢幕閱讀器仍可讀），取得焦點才顯示 */
+    .skip-link{ position:absolute; left:12px; top:-56px; z-index:1000;
+                background:var(--navy); color:#fff; padding:10px 16px;
+                border-radius:0 0 10px 10px; font-size:14px; font-weight:700;
+                transition:top .18s ease; }
+    .skip-link:focus{ top:0; color:#fff; outline:3px solid #fff; outline-offset:2px; }
+
+    /* 一致的鍵盤焦點樣式：淺色底用深藍外框（對比高）；下方另為深色底元件改亮色外框 */
+    :focus-visible{ outline:3px solid var(--navy-2); outline-offset:2px; }
+    /* 深色底元件（頁首、金／藍按鈕、深藍卡、Hero）改用白色外框確保可見 */
+    .topbar a:focus-visible, .btn:focus-visible, .home-btn:focus-visible,
+    .card-navy:focus-visible, .hero .btn:focus-visible{ outline-color:#fff; }
 
     /* 頁首 */
     .topbar{ background:var(--navy); color:#f4efe4; padding:15px 22px;
@@ -136,16 +150,20 @@
     .species-thumb-ph{ width:100%; height:100%; display:flex; align-items:center; justify-content:center;
                        font-size:34px; opacity:.45; }
 
-    /* 影像藝廊（詳細頁）：格狀正方形縮圖 + 純 CSS lightbox */
+    /* 影像藝廊（詳細頁）：格狀正方形縮圖 + <dialog> lightbox */
     .img-gallery{ display:grid; gap:18px; grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
                   margin-bottom:24px; }
     .img-cell{ margin:0; background:var(--paper); border:1px solid var(--bd); border-radius:14px;
                overflow:hidden; transition:transform .3s var(--ease), box-shadow .3s ease; }
     .img-cell:hover{ transform:translateY(-3px); box-shadow:var(--shadow); }
-    .img-cell .img-zoom{ display:block; aspect-ratio:1/1; background:var(--sand); }
-    .img-cell .img-zoom img{ width:100%; height:100%; object-fit:cover; display:block; cursor:zoom-in;
+    /* 縮圖觸發鈕：重置 button 預設樣式 */
+    .img-cell .img-zoom{ display:block; width:100%; aspect-ratio:1/1; background:var(--sand);
+                         border:0; padding:0; cursor:zoom-in; }
+    .img-cell .img-zoom img{ width:100%; height:100%; object-fit:cover; display:block;
                              transition:transform .35s var(--ease); }
     .img-cell:hover .img-zoom img{ transform:scale(1.05); }
+    /* 焦點框改為內縮，避免被 .img-cell 的 overflow:hidden 裁掉 */
+    .img-cell .img-zoom:focus-visible{ outline:3px solid var(--navy-2); outline-offset:-3px; }
     .img-cell figcaption{ padding:10px 13px 13px; }
     .img-cell .cap{ font-size:14px; color:var(--navy-ink); margin-bottom:4px; line-height:1.5; }
     .img-cell .meta{ font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:2px 12px; }
@@ -153,10 +171,17 @@
     .priv-badge{ display:inline-block; font-size:11px; background:var(--c-endangered-bg);
                  color:var(--c-endangered); border:1px solid var(--c-endangered);
                  border-radius:999px; padding:1px 9px; margin-bottom:6px; }
-    .lightbox{ position:fixed; inset:0; background:rgba(20,34,60,.92); display:none;
-               align-items:center; justify-content:center; padding:24px; z-index:999; cursor:zoom-out; }
-    .lightbox:target{ display:flex; }
-    .lightbox img{ max-width:96vw; max-height:92vh; border-radius:8px; box-shadow:0 20px 60px -20px #000; }
+    /* <dialog> lightbox：原生取得 Esc 關閉、焦點鎖定、關閉後焦點回觸發鈕 */
+    dialog.lightbox{ border:none; padding:0; background:transparent; max-width:96vw; max-height:94vh;
+                     overflow:visible; }
+    dialog.lightbox::backdrop{ background:rgba(20,34,60,.92); }
+    .lightbox-inner{ position:relative; display:inline-block; }
+    .lightbox-inner img{ display:block; max-width:96vw; max-height:88vh; border-radius:8px;
+                         box-shadow:0 20px 60px -20px #000; }
+    .lightbox-close{ position:absolute; top:-16px; right:-16px; width:40px; height:40px;
+                     border-radius:50%; border:2px solid #fff; background:var(--navy); color:#fff;
+                     font-size:18px; line-height:1; cursor:pointer; }
+    .lightbox-close:focus-visible{ outline:3px solid #fff; outline-offset:2px; }
 
     /* 詳細頁抬頭與檢視切換 */
     .detail-head{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:16px; margin-bottom:24px; }
@@ -243,20 +268,31 @@
       .img-gallery{ grid-template-columns:1fr; }
       .species-thumb{ flex-basis:72px; width:72px; height:72px; }
     }
+
+    /* 降低動態偏好：關閉/減弱動畫、轉場與捲動動效 */
+    @media (prefers-reduced-motion: reduce){
+      *, *::before, *::after{
+        animation-duration:.001ms !important;
+        animation-iteration-count:1 !important;
+        transition-duration:.001ms !important;
+        scroll-behavior:auto !important;
+      }
+    }
   </style>
   {% block head_extra %}{% endblock %}
 </head>
 <body>
-  <div class="topbar">
+  <a class="skip-link" href="#main">跳至主要內容</a>
+  <header class="topbar">
     <a href="{% url 'home' %}"><span class="brand">蘭陽博物館 · 飛行生物典藏</span></a>
     {% if request.resolver_match.url_name != 'home' %}
-    <a class="home-btn" href="{% url 'go_home' %}?from={{ request.get_full_path|urlencode }}">🏠 回首頁</a>
+    <a class="home-btn" href="{% url 'go_home' %}?from={{ request.get_full_path|urlencode }}"><span aria-hidden="true">🏠</span> 回首頁</a>
     {% endif %}
-  </div>
+  </header>
   {% block body %}
-  <div class="wrap">
+  <main id="main" class="wrap">
     {% block content %}{% endblock %}
-  </div>
+  </main>
   {% endblock %}
   <footer class="site">
     <nav class="site-foot-nav" aria-label="頁尾導覽">
