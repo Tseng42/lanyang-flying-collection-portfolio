@@ -129,6 +129,45 @@ class Specimen(models.Model):
         UNDER_REPAIR = "under_repair", "待修復"
         LOST = "lost", "遺失"
 
+    # 標本製作狀態（支援冰箱中尚未製作的冷凍標本先行建檔）
+    class PreparationStatus(models.TextChoices):
+        FROZEN_PENDING = "frozen_pending", "冷凍待處理"
+        IN_PROGRESS = "in_progress", "製作中"
+        DONE = "done", "已完成"
+        NOT_REQUIRED = "not_required", "無需製作"
+        OTHER = "other", "其他"
+
+    class PreservationMethod(models.TextChoices):
+        TAXIDERMY = "taxidermy", "剝製"
+        STUDY_SKIN = "study_skin", "假剝製"
+        FLUID = "fluid", "浸液"
+        SKELETON = "skeleton", "骨骼"
+        DRIED = "dried", "乾燥"
+        PINNED = "pinned", "針插"
+        FROZEN = "frozen", "冷凍"
+        OTHER = "other", "其他"
+
+    class CauseOfDeath(models.TextChoices):
+        ROADKILL = "roadkill", "路殺"
+        WINDOW_STRIKE = "window_strike", "窗殺"
+        ELECTROCUTION = "electrocution", "電殺"
+        CAT_DOG = "cat_dog", "貓犬咬傷"
+        SUSPECTED_POISON = "suspected_poison", "疑似中毒"
+        ENTANGLE_BYCATCH = "entangle_bycatch", "纏繞或誤捕"
+        NATURAL = "natural", "自然死亡"
+        CONFISCATED = "confiscated", "查獲沒入"
+        UNKNOWN = "unknown", "不明"
+        OTHER = "other", "其他"
+
+    class AcquisitionType(models.TextChoices):
+        PUBLIC_HANDIN = "public_handin", "民眾拾獲送交"
+        STAFF_COLLECT = "staff_collect", "館員採集"
+        AUTHORITY_TRANSFER = "authority_transfer", "主管機關移交"
+        DONATION = "donation", "捐贈"
+        PURCHASE = "purchase", "收購"
+        EXCHANGE = "exchange", "與他館交換"
+        OTHER = "other", "其他"
+
     # 危害標記可複選；都不勾即代表「無」
     HAZARD_CHOICES = [
         ("as", "砷 As"),
@@ -150,7 +189,10 @@ class Specimen(models.Model):
     )
 
     # 採集資訊
-    collector = models.CharField("採集者", max_length=200, blank=True)
+    collector = models.CharField(
+        "採集者", max_length=200, blank=True,
+        help_text="主動採集者或民眾拾獲者皆填於此，來源性質請於『取得方式』欄位標示",
+    )
     collection_date = models.DateField("採集日期", null=True, blank=True)
     collection_location = models.CharField(
         "採集地點", max_length=300, blank=True,
@@ -162,13 +204,21 @@ class Specimen(models.Model):
         "經度", max_digits=9, decimal_places=6, null=True, blank=True,
     )
 
-    # 入藏資訊（入藏日期必填，預設今天）
-    accession_date = models.DateField("入藏日期", default=timezone.localdate)
+    # 入藏資訊
+    # 註：以下三個欄位已停用（自表單撤下），保留於資料庫供歷史資料查考，
+    #     新建檔請改用「標本製作與來源」區塊的對應新欄位。
+    accession_date = models.DateField(
+        "入藏日期", default=timezone.localdate,
+        help_text="已停用，保留供歷史資料查考，請改用『取得日期』(acquisition_date)。",
+    )
     source = models.CharField(
         "來源", max_length=20, choices=Source.choices,
+        null=True, blank=True,
+        help_text="已停用，保留供歷史資料查考，請改用『取得方式』(acquisition_type)。",
     )
     preservation_status = models.CharField(
         "保存狀態", max_length=200, blank=True,
+        help_text="已停用，保留供歷史資料查考，請改用『保存方式』(preservation_method)。",
     )
 
     # 庫房位置
@@ -197,6 +247,39 @@ class Specimen(models.Model):
     identified_date = models.DateField("鑑定日期", null=True, blank=True)
 
     remarks = models.TextField("備註", blank=True, default="")
+
+    # 標本製作與來源（支援冷凍待製作標本先行建檔；皆可空白以免既有資料無法儲存）
+    preparation_status = models.CharField(
+        "製作狀態", max_length=20,
+        choices=PreparationStatus.choices, default=PreparationStatus.DONE,
+        help_text="冰箱中尚未處理者請選「冷凍待處理」",
+    )
+    preservation_method = models.CharField(
+        "保存方式", max_length=20,
+        choices=PreservationMethod.choices, blank=True,
+    )
+    cause_of_death = models.CharField(
+        "死亡原因", max_length=20,
+        choices=CauseOfDeath.choices, blank=True,
+        help_text="與人為因素相關者，具展示詮釋價值，請盡量填寫",
+    )
+    cause_of_death_note = models.CharField(
+        "死亡原因補述", max_length=200, blank=True,
+    )
+    acquisition_type = models.CharField(
+        "取得方式", max_length=20,
+        choices=AcquisitionType.choices, blank=True,
+    )
+    acquisition_date = models.DateField(
+        "取得日期", null=True, blank=True,
+        help_text="拾獲或入館日期，與採集日期不同時請分別填寫",
+    )
+    preparer = models.CharField("標本製作者", max_length=100, blank=True)
+    preparation_date = models.DateField("製作完成日期", null=True, blank=True)
+    storage_location = models.CharField(
+        "存放位置", max_length=100, blank=True,
+        help_text="例如 典藏庫冷凍櫃A-3、標本室第2櫃",
+    )
 
     # 建檔時間（供儀表板「最近新增」使用；不顯示於表單）
     created_at = models.DateTimeField(

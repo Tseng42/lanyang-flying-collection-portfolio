@@ -178,7 +178,7 @@ class SpecimenInline(TabularInline):
 
     model = Specimen
     extra = 0
-    fields = ("catalog_number", "specimen_type", "source", "collection_date")
+    fields = ("catalog_number", "specimen_type", "collection_date")
     show_change_link = True
 
 
@@ -360,11 +360,11 @@ class SpecimenAdmin(ModelAdmin):
         })
     list_display = (
         "catalog_number", "species", "specimen_type", "status",
-        "accession_date", "hazard_flag",
+        "hazard_flag",
     )
     list_filter = (
-        "species__taxon_group", "status", AccessionYearFilter,
-        HazardFilter, CompletenessFilter,
+        "species__taxon_group", "status", "preparation_status", "cause_of_death",
+        AccessionYearFilter, HazardFilter, CompletenessFilter,
     )
     search_fields = (
         "catalog_number", "species__scientific_name",
@@ -384,18 +384,28 @@ class SpecimenAdmin(ModelAdmin):
                 "表單中以粗體標示。典藏編號留空會自動產生。"
             ),
         }),
+        ("標本製作與來源", {
+            "fields": (
+                "preparation_status", "preservation_method",
+                "cause_of_death", "cause_of_death_note",
+                "acquisition_type", "acquisition_date",
+                "preparer", "preparation_date", "storage_location",
+            ),
+            "description": (
+                "支援冰箱中尚未製作的冷凍標本先行建檔；"
+                "冷凍待處理者請於「製作狀態」標示。"
+            ),
+        }),
         ("採集資訊", {
             "fields": (
                 "collector", "collection_date", "collection_location",
                 ("latitude", "longitude"),
             ),
         }),
-        ("入藏資訊", {
-            "fields": ("accession_date", "source"),
-            "description": "<b>入藏日期</b>為必填（預設今天）。",
-        }),
-        ("保存狀態", {
-            "fields": ("status", "hazard_markers", "preservation_status"),
+        # 「入藏資訊」fieldset 已移除：accession_date 與 source 停用、撤下表單
+        # （欄位仍保留於資料庫）。取得方式／取得日期改於「標本製作與來源」填寫。
+        ("狀態與危害", {
+            "fields": ("status", "hazard_markers"),
         }),
         ("典藏位置", {
             "fields": ("storeroom", "cabinet", "drawer"),
@@ -446,6 +456,8 @@ class SpecimenAdmin(ModelAdmin):
         columns = [
             ("occurrenceID", lambda s: s.catalog_number),
             ("basisOfRecord", lambda s: s.BASIS_OF_RECORD),
+            # DwC preparations：標本的製作／保存方式（對應 preservation_method）
+            ("preparations", lambda s: s.get_preservation_method_display() if s.preservation_method else ""),
             ("scientificName", lambda s: s.species.scientific_name),
             ("vernacularName", lambda s: s.species.common_name),
             ("order", lambda s: s.species.order),
