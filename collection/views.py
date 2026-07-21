@@ -304,6 +304,8 @@ def public_species_detail(request, pk):
             # 未鑑定 → 標示「鑑定中」；分類資訊以最低已知階層呈現，不留白
             "is_pending": sp.identification_status == Specimen.IdentificationStatus.UNIDENTIFIED,
             "taxon_label": _taxon_label(sp),
+            # 全球唯一識別碼（研究檢視顯示、可複製）
+            "occurrence_urn": f"urn:uuid:{sp.occurrence_uuid}",
         })
 
     # ---- 影像藝廊（隱私與權限一律在後端 queryset 過濾）----

@@ -6,6 +6,7 @@
 """
 
 import re
+import uuid
 
 from django.db import models
 from django.utils import timezone
@@ -221,6 +222,11 @@ class Specimen(models.Model):
         "典藏編號", max_length=50, primary_key=True,
         blank=True,
         help_text="留空即依「分類群代碼-年份-流水號」自動產生（例：AVE-2026-0001）；也可自行填寫。",
+    )
+    occurrence_uuid = models.UUIDField(
+        "全球唯一識別碼", default=uuid.uuid4, editable=False,
+        unique=True, db_index=True,
+        help_text="系統自動產生，用於對外發布與引用，產生後不得變更。",
     )
     taxon_group = models.CharField(
         # max_length 用 20（非任務所述 10）：值「flying_squirrel」長 15，且刻意

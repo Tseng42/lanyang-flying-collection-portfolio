@@ -169,6 +169,12 @@
           <span class="muted" style="font-size:13px;">地點（縣市）：{{ sp.locality|default:"—" }}</span>
           <span class="muted" style="font-size:13px;">鑑定者：{{ sp.identified_by|default:"—" }}</span>
         </div>
+        <div style="margin-top:8px; display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:12px;">
+          <span class="muted">全球唯一識別碼：</span>
+          <code style="background:#eef2f7; padding:2px 8px; border-radius:5px;">{{ sp.occurrence_urn }}</code>
+          <button type="button" class="copy-uuid" data-copy="{{ sp.occurrence_urn }}"
+            style="border:1px solid var(--bd); background:#fff; color:var(--navy-2); border-radius:6px; padding:2px 10px; cursor:pointer;">複製</button>
+        </div>
         {% if sp.history %}
           <div style="margin-top:12px; border-top:1px solid var(--bd); padding-top:10px;">
             <div style="font-size:13px; font-weight:700; color:var(--navy-ink); margin-bottom:6px;">鑑定歷程</div>
@@ -264,6 +270,31 @@
         } else {
           fallbackCopy(text); flashDone();
         }
+      });
+    })();
+  </script>
+
+  <script>
+    // 標本識別碼複製（研究檢視才有這些按鈕）
+    (function(){
+      function fallbackCopy(text){
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+      }
+      document.querySelectorAll('.copy-uuid').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var text = btn.getAttribute('data-copy');
+          function done(){
+            var o = btn.textContent; btn.textContent = '已複製 ✓';
+            setTimeout(function(){ btn.textContent = o; }, 1500);
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, function(){ fallbackCopy(text); done(); });
+          } else { fallbackCopy(text); done(); }
+        });
       });
     })();
   </script>

@@ -546,7 +546,8 @@ class SpecimenAdmin(ModelAdmin):
     fieldsets = (
         ("基本資料", {
             "fields": (
-                "catalog_number", "taxon_group", "identification_status",
+                "catalog_number", "occurrence_uuid",
+                "taxon_group", "identification_status",
                 "species_input", "species", "specimen_type", "basis_of_record",
             ),
             "description": (
@@ -597,7 +598,8 @@ class SpecimenAdmin(ModelAdmin):
     )
 
     def get_readonly_fields(self, request, obj=None):
-        readonly = ["basis_of_record"]
+        # occurrence_uuid 一律唯讀（自動產生、不得變更或清空）
+        readonly = ["basis_of_record", "occurrence_uuid"]
         if obj is not None:
             # 編輯既有標本時鎖定典藏編號（主鍵），避免改動造成關聯錯亂
             readonly.append("catalog_number")
@@ -707,7 +709,9 @@ class SpecimenAdmin(ModelAdmin):
 
         # (DwC 欄名, 取值函式)
         columns = [
-            ("occurrenceID", lambda s: s.catalog_number),
+            # occurrenceID 改用全球唯一 UUID（urn:uuid: 形式）；典藏編號改放 catalogNumber
+            ("occurrenceID", lambda s: f"urn:uuid:{s.occurrence_uuid}"),
+            ("catalogNumber", lambda s: s.catalog_number),
             ("basisOfRecord", lambda s: s.BASIS_OF_RECORD),
             # DwC preparations：標本的製作／保存方式（對應 preservation_method）
             ("preparations", lambda s: s.get_preservation_method_display() if s.preservation_method else ""),
@@ -735,11 +739,14 @@ class SpecimenAdmin(ModelAdmin):
             ("institutionCode", lambda s: "LYM"),
         ]
 
-        response = HttpResponse(content_type="text/csv; charset=utf-8-sig")
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
         response["Content-Disposition"] = (
             'attachment; filename="specimens_darwincore.csv"'
         )
-        # charset=utf-8-sig 已自動加 BOM，讓 Excel 正確判讀 UTF-8 中文
+        # 於檔首寫入單一 BOM 供 Excel 正確判讀 UTF-8 中文。
+        # 不可用 charset=utf-8-sig：那會使每次 writerow 各自加一個 BOM，
+        # 污染每列第一欄（例如 occurrenceID 會變成 BOM+urn:uuid:…）。
+        response.write("﻿")
         writer = csv.writer(response)
         writer.writerow([name for name, _ in columns])
         for specimen in queryset:
