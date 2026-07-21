@@ -105,26 +105,18 @@ class CompletenessFilter(admin.SimpleListFilter):
 
 
 class SpecimenAdminForm(forms.ModelForm):
-    """標本表單：學名可自由輸入（比對既有物種，找不到則自動建立），並加入防呆確認。"""
+    """標本表單：學名可直接打字（後端比對既有物種，找不到則自動建立）；
+    同時保留 species 下拉選取與「＋新增物種」彈窗，供使用者依習慣選擇。"""
 
-    # 學名以自由文字輸入取代原本的 species 下拉；species FK 於 save_model 解析設定
+    # 學名純文字輸入（無 JS）；儲存時由後端比對／自動建立並設定 species FK
     species_input = forms.CharField(
         required=False,
         label="學名",
         help_text=(
-            "可直接輸入學名或中文俗名，輸入時會出現既有物種建議。"
-            "找不到既有物種時，儲存會自動建立一筆（保育等級預設「待查證」）。"
-            "尚未鑑定可留空。"
+            "可直接輸入學名或中文俗名。若系統中已有相符的物種會自動連結，"
+            "沒有則會自動建立一筆新物種（保育等級預設「待查證」）。尚未鑑定可留空。"
+            "（若想改用下方選單挑選既有物種，請先清空此欄位。）"
         ),
-        widget=forms.TextInput(attrs={
-            "autocomplete": "off",
-            "data-species-autocomplete": "1",
-        }),
-    )
-    confirm_new_species = forms.BooleanField(
-        required=False,
-        label="確認新建物種",
-        help_text="輸入的學名與既有物種相似時，勾選此項可確認要新建一筆物種。",
     )
     confirm_duplicate = forms.BooleanField(
         required=False,
@@ -145,6 +137,14 @@ class SpecimenAdminForm(forms.ModelForm):
         if self.instance and self.instance.pk and self.instance.species_id:
             self.fields["species_input"].initial = (
                 self.instance.species.scientific_name
+            )
+        # 保留下拉／＋新增彈窗，但標示為輔助路徑（文字輸入優先）
+        if "species" in self.fields:
+            self.fields["species"].required = False
+            self.fields["species"].label = "（或）選取既有物種"
+            self.fields["species"].help_text = (
+                "可從下拉選取既有物種，或按右側＋開啟彈窗完整新增一筆。"
+                "若上方「學名」已輸入，將以上方為準。"
             )
 
     @staticmethod
@@ -168,8 +168,8 @@ class SpecimenAdminForm(forms.ModelForm):
 
     class Meta:
         model = Specimen
-        # 排除 species：改由 species_input 輸入、save_model 解析設定
-        exclude = ("species",)
+        # species 納入表單以提供下拉／＋新增彈窗；文字輸入優先，於 save_model 解析
+        fields = "__all__"
         # 中文說明文字（設在表單層，不更動資料模型）
         help_texts = {
             "catalog_number": (
@@ -212,7 +212,8 @@ class SpecimenAdminForm(forms.ModelForm):
         date = cleaned.get("collection_date")
         confirmed = cleaned.get("confirm_duplicate")
 
-        # ── 學名解析：自由輸入 → 既有物種或待自動建立 ──
+        # ── 學名解析：文字輸入優先；留空則用下拉選取的物種 ──
+        # 相似度不再阻擋儲存，改於 save_model 以警告訊息事後提示（第 9 點）。
         raw = (cleaned.get("species_input") or "").strip()
         self.resolved_species = None    # 比對到的既有物種
         self.new_species_name = None    # 需自動建立的學名（無比對時）
@@ -222,25 +223,13 @@ class SpecimenAdminForm(forms.ModelForm):
             ).first()
             if match:
                 self.resolved_species = match
-            elif not cleaned.get("confirm_new_species"):
-                # 高相似度提示（未勾確認則擋下）；同時列出學名與中文名
-                similar = self._find_similar_species(raw)
-                if similar:
-                    listed = "、".join(
-                        f"「{s.scientific_name}（{s.common_name or '無中文名'}）」"
-                        for s in similar
-                    )
-                    raise forms.ValidationError(
-                        f"輸入的學名「{raw}」與既有物種高度相似：{listed}。"
-                        "若其實是上述物種，請改填其學名；"
-                        "若確定為新物種、要新建一筆，請勾選下方「確認新建物種」後再送出。"
-                    )
-                self.new_species_name = raw
             else:
                 self.new_species_name = raw
-        # raw 為空 → 未鑑定（resolved/new 皆 None）
+        else:
+            # 文字留空 → 用下拉／彈窗選取的物種（可能為 None＝未鑑定）
+            self.resolved_species = cleaned.get("species")
 
-        # 供重複偵測使用（僅在比對到既有物種時才有意義）
+        # 供重複偵測使用（僅在比對到既有物種時才有意義；新建物種不可能重複）
         species = self.resolved_species
 
         # ── 日期邏輯驗證（欄位皆選填，僅在相關兩者都有值時檢查）──
@@ -497,11 +486,8 @@ class SpecimenAdmin(ModelAdmin):
     save_as = True
 
     class Media:
-        # 選好類群後自動建議典藏編號；學名欄位自由輸入 + 建議清單
-        js = (
-            "collection/js/catalog_suggest.js",
-            "collection/js/species_autocomplete.js",
-        )
+        # 選好類群後自動建議典藏編號（學名改為純文字輸入，無 JS）
+        js = ("collection/js/catalog_suggest.js",)
 
     def get_urls(self):
         custom = [
@@ -510,26 +496,8 @@ class SpecimenAdmin(ModelAdmin):
                 self.admin_site.admin_view(self.suggest_catalog_view),
                 name="collection_specimen_suggest_catalog",
             ),
-            path(
-                "species-search/",
-                self.admin_site.admin_view(self.species_search_view),
-                name="collection_specimen_species_search",
-            ),
         ]
         return custom + super().get_urls()
-
-    def species_search_view(self, request):
-        """學名自由輸入時的建議清單：比對既有物種的學名或中文名。"""
-        q = (request.GET.get("q") or "").strip()
-        if not q:
-            return JsonResponse({"results": []})
-        qs = Species.objects.filter(
-            Q(scientific_name__icontains=q) | Q(common_name__icontains=q)
-        ).order_by("scientific_name")[:10]
-        return JsonResponse({"results": [
-            {"scientific_name": s.scientific_name, "common_name": s.common_name}
-            for s in qs
-        ]})
 
     def suggest_catalog_view(self, request):
         """回傳指定類群的下一個可用典藏編號（供表單自動建議）。
@@ -569,17 +537,20 @@ class SpecimenAdmin(ModelAdmin):
         "species__common_name", "collector", "collection_location",
     )
     date_hierarchy = "accession_date"
+    # 保留物種下拉的搜尋 + 右側「＋新增物種」彈窗（供打字以外的完整填寫路徑）
+    autocomplete_fields = ("species",)
 
     fieldsets = (
         ("基本資料", {
             "fields": (
                 "catalog_number", "taxon_group", "identification_status",
-                "species_input", "specimen_type", "basis_of_record",
+                "species_input", "species", "specimen_type", "basis_of_record",
             ),
             "description": (
-                "必填：<b>類群</b>、<b>標本類型</b>。<b>學名</b>可直接輸入："
+                "必填：<b>類群</b>、<b>標本類型</b>。<b>學名</b>可直接於上方輸入框打字："
                 "比對到既有物種即沿用，找不到會自動建立（保育等級「待查證」）；"
-                "尚未鑑定可留空、待鑑定後補填。典藏編號留空會自動產生。"
+                "也可改用下方「選取既有物種」下拉／＋新增彈窗（需先清空學名輸入框）。"
+                "尚未鑑定可留空。典藏編號留空會自動產生。"
             ),
         }),
         ("標本製作與來源", {
@@ -617,11 +588,8 @@ class SpecimenAdmin(ModelAdmin):
         # 資料庫）。標本照片改由下方「標本影像」inline（SpecimenImage，可多張）管理。
         ("防呆確認", {
             "classes": ["collapse"],
-            "fields": ("confirm_new_species", "confirm_duplicate"),
-            "description": (
-                "學名與既有物種相似、或偵測到疑似重複標本時，"
-                "才需要勾選對應項目再送出。"
-            ),
+            "fields": ("confirm_duplicate",),
+            "description": "偵測到疑似重複標本時，才需要勾選此項再送出。",
         }),
     )
 
@@ -653,18 +621,38 @@ class SpecimenAdmin(ModelAdmin):
         return Species.objects.create(**kwargs)
 
     def save_model(self, request, obj, form, change):
-        # 解析學名輸入：既有物種 → 沿用；無比對 → 自動建立；留空 → 未鑑定
-        if getattr(form, "new_species_name", None):
-            sp = self._auto_create_species(form.new_species_name, obj.taxon_group)
+        # 解析學名：無比對 → 自動建立；比對到/下拉選取 → 沿用；留空 → 未鑑定
+        new_name = getattr(form, "new_species_name", None)
+        if new_name:
+            # 先算相似物種（於建立前，避免把剛建的算進去），事後以警告提示、不阻擋
+            similar = SpecimenAdminForm._find_similar_species(new_name)
+            sp = self._auto_create_species(new_name, obj.taxon_group)
             obj.species = sp
             self.message_user(
                 request,
-                f"已自動建立物種「{sp.scientific_name}」（保育等級：待查證）。"
-                "請盡快至物種頁補齊保育等級與分類資訊。",
+                f"已自動建立新物種：{sp.scientific_name}，"
+                "請盡快補齊保育等級與分類資訊。",
                 level=messages.WARNING,
             )
+            if similar:
+                listed = "、".join(
+                    f"「{s.scientific_name}（{s.common_name or '無中文名'}）」"
+                    for s in similar
+                )
+                self.message_user(
+                    request,
+                    f"注意：新建的「{new_name}」與既有物種相似：{listed}。"
+                    "若其實是同一物種，請改連結該既有物種以免重複。",
+                    level=messages.WARNING,
+                )
         else:
             obj.species = getattr(form, "resolved_species", None)
+            if obj.species is not None:
+                self.message_user(
+                    request,
+                    f"已連結至既有物種：{obj.species.scientific_name}。",
+                    level=messages.INFO,
+                )
 
         auto = not obj.catalog_number
         super().save_model(request, obj, form, change)
