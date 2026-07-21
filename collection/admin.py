@@ -119,6 +119,7 @@ class SpecimenAdminForm(forms.ModelForm):
         help_text=(
             "可直接輸入學名或中文俗名。若系統中已有相符的物種會自動連結，"
             "沒有則會自動建立一筆新物種（保育等級預設「待查證」）。尚未鑑定可留空。"
+            "（若想改用下方選單挑選既有物種，請先清空此欄位。）"
         ),
         widget=forms.TextInput(attrs={"class": " ".join(INPUT_CLASSES)}),
     )
@@ -142,6 +143,14 @@ class SpecimenAdminForm(forms.ModelForm):
             self.fields["species_input"].initial = (
                 self.instance.species.scientific_name
             )
+        # 下拉選取路徑（Django admin 標準 select + 預設＋新增彈窗）；文字框優先
+        if "species" in self.fields:
+            self.fields["species"].required = False
+            self.fields["species"].label = "（或）選取既有物種"
+            self.fields["species"].help_text = (
+                "可從下拉選取既有物種，或按右側＋開啟彈窗完整新增一筆。"
+                "若上方「學名」已輸入，將以上方為準。"
+            )
 
     @staticmethod
     def _find_similar_species(raw, cutoff=0.85, n=3):
@@ -164,8 +173,9 @@ class SpecimenAdminForm(forms.ModelForm):
 
     class Meta:
         model = Specimen
-        # 排除 species：學名改由 species_input 純文字輸入，於 save_model 解析設定
-        exclude = ("species",)
+        # species 納入表單以提供標準下拉 select（含預設＋新增彈窗）；文字框優先，
+        # 於 save_model 解析。label/help/required 於 __init__ 設定。
+        fields = "__all__"
         # 中文說明文字（設在表單層，不更動資料模型）
         help_texts = {
             "catalog_number": (
@@ -207,11 +217,11 @@ class SpecimenAdminForm(forms.ModelForm):
         date = cleaned.get("collection_date")
         confirmed = cleaned.get("confirm_duplicate")
 
-        # ── 學名解析（純文字輸入）：去空白後 iexact 比對學名／中文名 ──
-        # 相似度不阻擋儲存，改於 save_model 以警告訊息事後提示（第 9 點）。
+        # ── 學名解析：文字框優先；文字框留空才採用下拉選取 ──
+        # 相似度不阻擋儲存，改於 save_model 以警告訊息事後提示。
         raw = (cleaned.get("species_input") or "").strip()
-        self.resolved_species = None    # 比對到的既有物種
-        self.new_species_name = None    # 需自動建立的學名（無比對時）
+        self.resolved_species = None    # 比對到／下拉選取的既有物種
+        self.new_species_name = None    # 需自動建立的學名（文字框無比對時）
         if raw:
             match = Species.objects.filter(
                 Q(scientific_name__iexact=raw) | Q(common_name__iexact=raw)
@@ -220,7 +230,9 @@ class SpecimenAdminForm(forms.ModelForm):
                 self.resolved_species = match
             else:
                 self.new_species_name = raw
-        # raw 為空 → species=None（未鑑定）
+        else:
+            # 文字框留空 → 直接採用下拉選取的物種（可能為 None＝未鑑定）
+            self.resolved_species = cleaned.get("species")
 
         # 供重複偵測使用（僅在比對到既有物種時才有意義；新建物種不可能重複）
         species = self.resolved_species
@@ -535,12 +547,13 @@ class SpecimenAdmin(ModelAdmin):
         ("基本資料", {
             "fields": (
                 "catalog_number", "taxon_group", "identification_status",
-                "species_input", "specimen_type", "basis_of_record",
+                "species_input", "species", "specimen_type", "basis_of_record",
             ),
             "description": (
-                "必填：<b>類群</b>、<b>標本類型</b>。<b>學名</b>可直接輸入："
+                "必填：<b>類群</b>、<b>標本類型</b>。<b>學名</b>可直接於上方輸入框打字："
                 "比對到既有物種即沿用，找不到會自動建立（保育等級「待查證」）；"
-                "尚未鑑定可留空、待鑑定後補填。典藏編號留空會自動產生。"
+                "也可清空輸入框、改用下方「選取既有物種」下拉／＋新增彈窗。"
+                "尚未鑑定可留空。典藏編號留空會自動產生。"
             ),
         }),
         ("標本製作與來源", {
