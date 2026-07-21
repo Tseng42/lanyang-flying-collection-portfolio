@@ -268,7 +268,8 @@ def public_species_detail(request, pk):
     protected = species.conservation_status != Species.ConservationStatus.GENERAL
 
     # 標本：未鑑定標本不再排除，簡易版與研究檢視都顯示（僅以「鑑定中」標示）。
-    specimen_qs = species.specimens.prefetch_related(
+    # select_related("collection_event")：採集資訊改讀事件，避免逐筆查詢（N+1）。
+    specimen_qs = species.specimens.select_related("collection_event").prefetch_related(
         "identifications__identified_as"
     )
 
@@ -282,7 +283,11 @@ def public_species_detail(request, pk):
 
     specimens = []
     for sp in specimen_qs:
-        locality = _county_of(sp.collection_location) or "（僅限館內）"
+        # 採集資訊一律改讀採集事件（不讀 Specimen 舊採集欄位）；無事件則留空。
+        # 只取地點（降為縣市）與採集日期進入 context；精確經緯度絕不進入公開頁。
+        ce = sp.collection_event
+        locality = (_county_of(ce.collection_location) if ce else "") or "（僅限館內）"
+        collection_date = ce.collection_date if ce else None
 
         history = []
         for idn in sp.identifications.all():  # 已依 -identified_date 排序
@@ -297,8 +302,8 @@ def public_species_detail(request, pk):
         specimens.append({
             "catalog": sp.catalog_number,
             "type": sp.get_specimen_type_display(),
-            "date": sp.collection_date,
-            "locality": locality,              # 僅縣市層級
+            "date": collection_date,           # 讀自採集事件
+            "locality": locality,              # 讀自採集事件、僅縣市層級
             "identified_by": sp.identified_by,  # 鑑定者（非採集者/來源）
             "history": history,
             # 未鑑定 → 標示「鑑定中」；分類資訊以最低已知階層呈現，不留白

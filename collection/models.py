@@ -118,6 +118,69 @@ class Species(models.Model):
         return self.scientific_name
 
 
+class CollectionEvent(models.Model):
+    """採集事件 — 一次採集的時間／地點／座標／採集者等資訊。
+
+    多件同一次採集的標本可共用一個採集事件，避免重複輸入相同資訊；
+    對應 Darwin Core 的 Event（eventID 見 event_uuid）。
+    """
+
+    class SamplingProtocol(models.TextChoices):
+        MIST_NET = "mist_net", "霧網"
+        LIGHT_TRAP = "light_trap", "燈光誘集"
+        SWEEP_NET = "sweep_net", "掃網"
+        TRAP = "trap", "陷阱"
+        FOUND = "found", "拾獲"
+        ACOUSTIC = "acoustic", "聲波偵測"
+        OTHER = "other", "其他"
+
+    event_uuid = models.UUIDField(
+        "採集事件識別碼", default=uuid.uuid4, editable=False,
+        unique=True, db_index=True,
+        help_text="系統自動產生，作為 Darwin Core eventID，產生後不得變更。",
+    )
+    collection_date = models.DateField("採集日期", null=True, blank=True)
+    collection_location = models.CharField(
+        "採集地點", max_length=300, blank=True,
+        help_text=(
+            "請填至縣市與鄉鎮市區層級即可（例：宜蘭縣蘇澳鎮）。"
+            "為保護保育類棲地、防範盜獵，請勿填入巷弄、門牌、確切巢位或棲所座標；"
+            "精確座標請填於下方「緯度／經度」欄位（不會出現在公開頁）。"
+        ),
+    )
+    latitude = models.DecimalField(
+        "緯度", max_digits=9, decimal_places=6, null=True, blank=True,
+    )
+    longitude = models.DecimalField(
+        "經度", max_digits=9, decimal_places=6, null=True, blank=True,
+    )
+    collector = models.CharField(
+        "採集者", max_length=200, blank=True,
+        help_text="主動採集者或民眾拾獲者皆填於此。",
+    )
+    habitat = models.CharField(
+        "棲地環境", max_length=300, blank=True,
+        help_text="對應 Darwin Core habitat；選填。",
+    )
+    sampling_protocol = models.CharField(
+        "採集方法", max_length=20,
+        choices=SamplingProtocol.choices, blank=True,
+        help_text="對應 Darwin Core samplingProtocol；選填。",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "採集事件"
+        verbose_name_plural = "採集事件"
+        ordering = ["-collection_date", "-created_at"]
+
+    def __str__(self):
+        loc = self.collection_location or "（地點未填）"
+        date = self.collection_date.isoformat() if self.collection_date else "（日期未填）"
+        label = f"{loc}｜{date}"
+        return f"{label}｜{self.collector}" if self.collector else label
+
+
 class Specimen(models.Model):
     """標本表 — 館藏實體標本，主鍵為典藏編號。"""
 
@@ -249,7 +312,16 @@ class Specimen(models.Model):
         "標本類型", max_length=20, choices=SpecimenType.choices,
     )
 
-    # 採集資訊
+    # 採集事件（選填）：多件同一次採集的標本共用一筆，避免重複輸入。
+    # 公開頁／CSV／DwC 匯出一律改讀此關聯的採集事件，不再讀下方保留的舊採集欄位。
+    collection_event = models.ForeignKey(
+        "CollectionEvent", on_delete=models.PROTECT,
+        related_name="specimens", verbose_name="採集事件",
+        null=True, blank=True,
+        help_text="選填。來源不明的標本可留空。",
+    )
+
+    # 採集資訊（舊欄位：已改由「採集事件」提供，僅保留於資料庫供歷史查考，撤出表單）
     collector = models.CharField(
         "採集者", max_length=200, blank=True,
         help_text="主動採集者或民眾拾獲者皆填於此，來源性質請於『取得方式』欄位標示",

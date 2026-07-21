@@ -27,7 +27,7 @@ from unfold.forms import (
 from unfold.widgets import INPUT_CLASSES
 
 from .models import (
-    CATALOG_NUMBER_RE, Identification, Movement, Observation,
+    CATALOG_NUMBER_RE, CollectionEvent, Identification, Movement, Observation,
     ObservationImage, Species, SpeciesImage, Specimen, SpecimenImage,
 )
 
@@ -173,9 +173,12 @@ class SpecimenAdminForm(forms.ModelForm):
 
     class Meta:
         model = Specimen
-        # species 納入表單以提供標準下拉 select（含預設＋新增彈窗）；文字框優先，
-        # 於 save_model 解析。label/help/required 於 __init__ 設定。
-        fields = "__all__"
+        # 保留 species（下拉，與 species_input 並存）；採集欄位改由「採集事件」提供，
+        # 故排除舊採集欄位，避免被空值覆寫（欄位仍保留於資料庫供歷史查考）。
+        exclude = (
+            "collector", "collection_date", "collection_location",
+            "latitude", "longitude",
+        )
         # 中文說明文字（設在表單層，不更動資料模型）
         help_texts = {
             "catalog_number": (
@@ -276,8 +279,10 @@ class SpecimenInline(TabularInline):
     """在物種頁面內嵌顯示其標本。"""
 
     model = Specimen
+    fk_name = "species"
     extra = 0
-    fields = ("catalog_number", "specimen_type", "collection_date")
+    # 採集日期已移至採集事件，故此處不再顯示（避免顯示已停用的舊欄位）
+    fields = ("catalog_number", "specimen_type")
     show_change_link = True
 
 
@@ -539,9 +544,13 @@ class SpecimenAdmin(ModelAdmin):
         return f"（未鑑定・{obj.get_taxon_group_display()}）"
     search_fields = (
         "catalog_number", "species__scientific_name",
-        "species__common_name", "collector", "collection_location",
+        "species__common_name",
+        # 採集者／地點改由採集事件搜尋（舊欄位已撤出表單）
+        "collection_event__collector", "collection_event__collection_location",
     )
     date_hierarchy = "accession_date"
+    # 採集事件下拉搜尋 + 右側「＋新增採集事件」彈窗
+    autocomplete_fields = ("collection_event",)
 
     fieldsets = (
         ("基本資料", {
@@ -569,10 +578,12 @@ class SpecimenAdmin(ModelAdmin):
                 "冷凍待處理者請於「製作狀態」標示。"
             ),
         }),
-        ("採集資訊", {
-            "fields": (
-                "collector", "collection_date", "collection_location",
-                ("latitude", "longitude"),
+        ("採集事件", {
+            "fields": ("collection_event",),
+            "description": (
+                "採集時間／地點／座標／採集者等改由「採集事件」提供，多件同一次採集"
+                "的標本可共用一筆，避免重複輸入。可從下拉選取，或按右側＋新增一筆。"
+                "來源不明者可留空。"
             ),
         }),
         # 「入藏資訊」fieldset 已移除：accession_date 與 source 停用、撤下表單
@@ -671,7 +682,7 @@ class SpecimenAdmin(ModelAdmin):
     @admin.action(description="匯出為 Darwin Core CSV")
     def export_darwin_core_csv(self, request, queryset):
         """把勾選的標本匯出成 Darwin Core 欄位的 CSV。"""
-        queryset = queryset.select_related("species")
+        queryset = queryset.select_related("species", "collection_event")
 
         def dwc_date(value):
             # Darwin Core eventDate 用 ISO 8601（YYYY-MM-DD）
@@ -707,12 +718,32 @@ class SpecimenAdmin(ModelAdmin):
                 return True
             return s.species.conservation_status != Species.ConservationStatus.GENERAL
 
+        def ev(s, attr):
+            # 採集資訊一律讀採集事件；無事件或值為 None 則回空字串。
+            # 不讀 Specimen 上保留的舊採集欄位，避免兩份資料不一致。
+            ce = s.collection_event
+            if ce is None:
+                return ""
+            val = getattr(ce, attr)
+            return "" if val is None else val
+
+        def ev_coord(s, attr):
+            # 精確經緯度：保育類/待查證/未鑑定一律留空；其餘讀採集事件。
+            if is_withheld(s):
+                return ""
+            ce = s.collection_event
+            if ce is None or getattr(ce, attr) is None:
+                return ""
+            return getattr(ce, attr)
+
         # (DwC 欄名, 取值函式)
         columns = [
             # occurrenceID 改用全球唯一 UUID（urn:uuid: 形式）；典藏編號改放 catalogNumber
             ("occurrenceID", lambda s: f"urn:uuid:{s.occurrence_uuid}"),
             ("catalogNumber", lambda s: s.catalog_number),
             ("basisOfRecord", lambda s: s.BASIS_OF_RECORD),
+            # eventID：比照 occurrenceID 以 urn:uuid: 輸出採集事件 UUID（無事件則空）
+            ("eventID", lambda s: f"urn:uuid:{s.collection_event.event_uuid}" if s.collection_event_id else ""),
             # DwC preparations：標本的製作／保存方式（對應 preservation_method）
             ("preparations", lambda s: s.get_preservation_method_display() if s.preservation_method else ""),
             # 較高分類：未鑑定時仍可由類群提供 kingdom/class（符合 DwC，可於 GBIF 高階匹配）
@@ -725,15 +756,18 @@ class SpecimenAdmin(ModelAdmin):
             ("taxonID", lambda s: sp_attr(s, "taicol_taxon_id")),
             ("taxonRank", lambda s: RANK.get(s.identification_status, "")),
             ("identificationRemarks", lambda s: s.get_identification_status_display()),
-            ("recordedBy", lambda s: s.collector),
-            ("eventDate", lambda s: dwc_date(s.collection_date)),
+            # 以下採集欄位一律讀採集事件（collection_event），不讀 Specimen 舊欄位
+            ("recordedBy", lambda s: ev(s, "collector")),
+            ("eventDate", lambda s: dwc_date(ev(s, "collection_date") or None)),
+            ("samplingProtocol", lambda s: s.collection_event.get_sampling_protocol_display() if (s.collection_event_id and s.collection_event.sampling_protocol) else ""),
+            ("habitat", lambda s: ev(s, "habitat")),
             # 保育類／待查證／未鑑定：精確經緯度留空，並以 informationWithheld 說明原因；
             # 仍輸出行政區層級地點（stateProvince 縣市、locality 縣市＋鄉鎮），保留地理價值。
-            ("decimalLatitude", lambda s: "" if is_withheld(s) else (s.latitude if s.latitude is not None else "")),
-            ("decimalLongitude", lambda s: "" if is_withheld(s) else (s.longitude if s.longitude is not None else "")),
+            ("decimalLatitude", lambda s: ev_coord(s, "latitude")),
+            ("decimalLongitude", lambda s: ev_coord(s, "longitude")),
             ("informationWithheld", lambda s: WITHHELD_NOTE if is_withheld(s) else ""),
-            ("stateProvince", lambda s: _county_of(s.collection_location)),
-            ("locality", lambda s: s.collection_location),
+            ("stateProvince", lambda s: _county_of(ev(s, "collection_location"))),
+            ("locality", lambda s: ev(s, "collection_location")),
             ("identifiedBy", lambda s: s.identified_by),
             ("dateIdentified", lambda s: dwc_date(s.identified_date)),
             ("institutionCode", lambda s: "LYM"),
@@ -822,6 +856,59 @@ class ObservationAdmin(ModelAdmin):
     @admin.display(description="basisOfRecord")
     def basis_of_record(self, obj):
         return obj.BASIS_OF_RECORD
+
+
+class SpecimenCollectionInline(TabularInline):
+    """在採集事件頁面內嵌批次新增／檢視該次採集的標本。
+
+    僅收標本專屬欄位（採集資訊由母層事件共用、不重複輸入）；學名採下拉
+    autocomplete（此處無 SpecimenAdminForm 的自由輸入自動建物種），細部
+    可再到標本頁編修。館藏編號留空會自動產生。
+    """
+
+    model = Specimen
+    fk_name = "collection_event"
+    extra = 1
+    fields = (
+        "catalog_number", "taxon_group", "species",
+        "specimen_type", "identification_status",
+    )
+    autocomplete_fields = ("species",)
+    show_change_link = True
+
+
+@admin.register(CollectionEvent)
+class CollectionEventAdmin(ModelAdmin):
+    """採集事件：先建立一次採集事件，再以下方 inline 快速新增多件標本。"""
+
+    list_display = (
+        "__str__", "collection_date", "collection_location",
+        "collector", "sampling_protocol", "specimen_count",
+    )
+    list_filter = ("sampling_protocol",)
+    # 供 Specimen.collection_event 的 autocomplete 使用
+    search_fields = ("collection_location", "collector", "habitat")
+    readonly_fields = ("event_uuid",)
+    inlines = (SpecimenCollectionInline,)
+
+    fieldsets = (
+        ("採集事件", {
+            "fields": (
+                "event_uuid",
+                "collection_date", "collection_location",
+                ("latitude", "longitude"),
+                "collector", "habitat", "sampling_protocol",
+            ),
+            "description": (
+                "精確經緯度僅供內部與 Darwin Core 匯出使用，公開頁一律只顯示到"
+                "縣市層級、且保育類不輸出精確座標。"
+            ),
+        }),
+    )
+
+    @admin.display(description="標本數")
+    def specimen_count(self, obj):
+        return obj.specimens.count()
 
 
 # ---------------------------------------------------------------------------
