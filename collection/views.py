@@ -24,8 +24,16 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from .external import search_external_links, species_external_links
-from .models import ObservationImage, Species, SpeciesImage
+from .models import ObservationImage, Species, SpeciesImage, Specimen
 from .stats import public_stats, staff_extra_stats
+
+
+def _is_research(request):
+    """公開頁的檢視模式：帶 ?view=research 為研究檢視（顯示全部）；否則為簡易版。
+
+    僅用於「決定資料集過濾與提示文字」，不涉及權限；敏感欄位一律另依權限判斷。
+    """
+    return request.GET.get("view") == "research"
 
 
 # Cloudinary 即時轉換參數：只載入縮圖／限制尺寸，不抓原始大圖。
@@ -64,8 +72,8 @@ def _gallery_item(img, species):
 
 
 def public_stats_view(request):
-    """大眾統計頁（免登入、唯讀）：僅公開數據。"""
-    return render(request, "collection/stats_public.html", public_stats())
+    """大眾統計頁（免登入、唯讀）：僅公開數據（採簡易版過濾後的數量）。"""
+    return render(request, "collection/stats_public.html", public_stats(simple=True))
 
 
 @login_required(login_url="/admin/login/")
@@ -146,12 +154,18 @@ def privacy_policy(request):
 
 
 def _filtered_species(request):
-    """依查詢參數過濾物種，回傳 (queryset, q, group, status)。列表與匯出共用。"""
+    """依查詢參數過濾物種，回傳 (queryset, q, group, status)。列表與匯出共用。
+
+    簡易版（無 ?view=research）額外排除自動建立（待查證）物種；研究檢視顯示全部。
+    """
     q = request.GET.get("q", "").strip()
     group = request.GET.get("taxon_group", "")
     status = request.GET.get("conservation_status", "")
 
     species = Species.objects.all()
+    # 簡易版排除自動建立（待查證）物種；研究檢視顯示全部
+    if not _is_research(request):
+        species = species.exclude(is_auto_created=True)
     if q:
         # icontains → 學名/中文名皆不分大小寫
         species = species.filter(
@@ -197,14 +211,27 @@ def public_species_list(request):
         "db_empty": not Species.objects.exists(),
         # 有查詢條件卻查無結果時，引導到外部權威資源查詢
         "no_result_links": search_external_links(q) if not total else None,
+        # 檢視模式：研究檢視顯示全部並標示待查證；簡易版於頁尾顯示說明
+        "is_research": _is_research(request),
     }
     return render(request, "collection/species_list.html", context)
 
 
 def public_species_export(request):
-    """把目前的查詢結果匯出成 CSV（僅公開可見欄位；不含捐贈者姓名與精確座標）。"""
+    """把目前的查詢結果匯出成 CSV（僅公開可見欄位；不含捐贈者姓名與精確座標）。
+
+    跟隨同一個 view 參數：簡易版匯出過濾後資料集（排除自動建立物種、標本數不計
+    未鑑定）；研究檢視匯出全部。此匯出為物種層級、本就不含精確座標等敏感欄位。
+    """
     species, _q, _group, _status = _filtered_species(request)
-    species = species.annotate(n_specimens=Count("specimens"))
+    if _is_research(request):
+        species = species.annotate(n_specimens=Count("specimens"))
+    else:
+        # 簡易版：館藏標本數不計「未鑑定」標本，與頁面數字一致
+        species = species.annotate(n_specimens=Count(
+            "specimens",
+            filter=~Q(specimens__identification_status=Specimen.IdentificationStatus.UNIDENTIFIED),
+        ))
 
     columns = [
         ("中文名", lambda s: s.common_name),
@@ -237,16 +264,27 @@ def public_species_detail(request, pk):
     隱私在後端就過濾：不輸出採集者／來源等姓名，地點一律只到縣市層級，
     精確經緯度完全不輸出（前端無從取得）。
     """
-    species = get_object_or_404(
-        Species.objects.prefetch_related(
-            "specimens__identifications__identified_as"
-        ),
-        pk=pk,
-    )
+    species = get_object_or_404(Species, pk=pk)
+    is_research = _is_research(request)
+
+    # 簡易版直接開啟被排除（自動建立）的物種 → 302 導向研究檢視，並提示已切換。
+    # 不回 404。
+    if not is_research and species.is_auto_created:
+        return redirect(f"{request.path}?view=research&switched=1")
+
     protected = species.conservation_status != Species.ConservationStatus.GENERAL
 
+    # 標本：簡易版排除「未鑑定」標本；研究檢視顯示全部。
+    specimen_qs = species.specimens.prefetch_related(
+        "identifications__identified_as"
+    )
+    if not is_research:
+        specimen_qs = specimen_qs.exclude(
+            identification_status=Specimen.IdentificationStatus.UNIDENTIFIED
+        )
+
     specimens = []
-    for sp in species.specimens.all():
+    for sp in specimen_qs:
         locality = _county_of(sp.collection_location) or "（僅限館內）"
 
         history = []
@@ -310,6 +348,9 @@ def public_species_detail(request, pk):
         "external_links": species_external_links(species),
         "images": public_gallery,
         "research_images": private_gallery,
+        # 檢視模式（決定是否渲染研究區塊、標示待查證、頁面提示）
+        "is_research": is_research,
+        "switched": request.GET.get("switched") == "1",
     }
     return render(request, "collection/species_detail.html", context)
 

@@ -60,6 +60,7 @@
             <div class="tags">
               <span class="tag grp">{{ s.get_taxon_group_display }}</span>
               <span class="tag cons-{{ s.conservation_status }}">{{ s.get_conservation_status_display }}</span>
+              {% if is_research and s.is_auto_created %}<span class="tag cons-unverified">待查證</span>{% endif %}
             </div>
           </div>
         </a>
@@ -90,5 +91,11 @@
       <p class="muted" style="font-size:11px; margin:16px 0 0;">
         外部網站由各機構維護，與本館典藏各自獨立。</p>
     </div>
+  {% endif %}
+
+  {% if not is_research %}
+    <p class="muted" style="margin-top:22px; font-size:12px;">
+      本館部分標本尚在鑑定或查證中，未於此頁呈現。完整館藏狀態請切換至<a
+        href="?view=research{% if q %}&q={{ q|urlencode }}{% endif %}{% if group %}&taxon_group={{ group|urlencode }}{% endif %}{% if status %}&conservation_status={{ status|urlencode }}{% endif %}">研究檢視</a>。</p>
   {% endif %}
 {% endblock %}

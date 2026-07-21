@@ -5,20 +5,27 @@
 {% block content %}
   <a class="backlink" href="{% url 'public_species_list' %}">← 回查詢典藏</a>
 
+  {% if switched %}
+    <div class="panel" role="status" style="background:#fbf6df; border-color:#e6cf8a;
+         color:var(--gold-dk); font-size:14px; padding:12px 16px; margin-bottom:16px;">
+      此筆資料尚在鑑定或查證中，已為您切換至研究檢視。</div>
+  {% endif %}
+
   <div class="detail-head">
     <div style="flex:1; min-width:220px;">
       <h1 style="margin-bottom:4px;">
         {{ species.common_name|default:"（無中文名）" }}
         {% if protected %}<span class="tag cons-{{ species.conservation_status }}">保育類</span>{% endif %}
+        {% if is_research and species.is_auto_created %}<span class="tag cons-unverified">待查證</span>{% endif %}
       </h1>
       <p class="sci muted" style="margin:0;">{{ species.scientific_name }}</p>
     </div>
-    <!-- 兩層檢視切換鈕 -->
+    <!-- 兩層檢視切換鈕（切換時以帶 ?view 參數的網址重新載入，由後端決定內容） -->
     <div class="view-toggle">
       <button type="button" id="btn-simple" onclick="setView('simple')"
-        style="background:var(--gold); color:#fff;">簡易版</button>
+        style="{% if not is_research %}background:var(--gold); color:#fff;{% else %}background:#fbf7ee; color:var(--muted);{% endif %}">簡易版</button>
       <button type="button" id="btn-research" onclick="setView('research')"
-        style="background:#fbf7ee; color:var(--muted);">研究檢視</button>
+        style="{% if is_research %}background:var(--gold); color:#fff;{% else %}background:#fbf7ee; color:var(--muted);{% endif %}">研究檢視</button>
     </div>
   </div>
 
@@ -82,8 +89,9 @@
     </div>
   {% endif %}
 
-  <!-- 研究檢視：預設隱藏，切換顯示 -->
-  <div id="research-block" style="display:none;">
+  <!-- 研究檢視：僅在 ?view=research 時由後端渲染（簡易版原始碼不含此區塊內容） -->
+  {% if is_research %}
+  <div id="research-block">
     <p class="muted" style="font-size:13px; margin:2px 0 14px; padding:8px 12px;
        background:#eef2f7; border-left:3px solid var(--navy-2); border-radius:4px;">
       ℹ️ 以下為研究人員參考資訊。</p>
@@ -151,6 +159,7 @@
       </div>
     {% endfor %}
   </div>
+  {% endif %}
 
   <p class="muted" style="margin-top:18px; font-size:12px;">
     ※ 為保護隱私，本頁不顯示採集者／來源等姓名，且座標僅公開至縣市層級。</p>
@@ -228,22 +237,13 @@
   </script>
 
   <script>
+    // 切換檢視：以帶 ?view 參數的網址重新載入，由後端決定要不要渲染研究區塊
     function setView(mode){
-      var research = document.getElementById('research-block');
-      var bS = document.getElementById('btn-simple'), bR = document.getElementById('btn-research');
-      var on = {background:'#b08643', color:'#fff'}, off = {background:'#fbf6ea', color:'#726a5c'};
-      var isR = (mode === 'research');
-      if(isR){
-        research.style.display = 'block';
-        // 重新觸發淡入動畫（僅視覺效果，不改變切換邏輯）
-        research.classList.remove('fade-up');
-        void research.offsetWidth;
-        research.classList.add('fade-up');
-      } else {
-        research.style.display = 'none';
-      }
-      Object.assign((isR?bR:bS).style, on);
-      Object.assign((isR?bS:bR).style, off);
+      var url = new URL(window.location.href);
+      if (mode === 'research') { url.searchParams.set('view', 'research'); }
+      else { url.searchParams.delete('view'); }
+      url.searchParams.delete('switched');   // 清掉一次性提示參數
+      window.location.href = url.toString();
     }
   </script>
 {% endblock %}
