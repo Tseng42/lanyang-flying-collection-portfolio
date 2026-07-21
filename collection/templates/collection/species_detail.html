@@ -89,6 +89,23 @@
     </div>
   {% endif %}
 
+  <!-- 簡易版：逐筆列出標本（精簡欄位）；研究檢視改由下方研究區塊顯示完整 spec-card -->
+  {% if not is_research %}
+    {% if specimens %}
+      <h2 class="sec">館藏標本</h2>
+      {% for sp in specimens %}
+        <div class="panel spec-card">
+          <div class="spec-head">
+            <span class="cat">{{ sp.catalog }}</span>
+            {% if sp.is_pending %}<span class="tag cons-unverified">鑑定中</span>{% endif %}
+            <span class="muted" style="font-size:13px;">採集地：{{ sp.locality|default:"—" }}</span>
+            <span class="muted" style="font-size:13px;">採集日期：{{ sp.date|default:"—" }}</span>
+          </div>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endif %}
+
   <!-- 研究檢視：僅在 ?view=research 時由後端渲染（簡易版原始碼不含此區塊內容） -->
   {% if is_research %}
   <div id="research-block">
