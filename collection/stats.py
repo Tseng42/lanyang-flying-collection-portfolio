@@ -20,17 +20,13 @@ def _count_map(manager, field):
 def public_stats(simple=False):
     """公開統計：總數、各分類群、保育等級分布。
 
-    simple=True（公開/簡易版）：排除自動建立（待查證）物種與「未鑑定」標本，
-    使公開頁數字與簡易版檢索一致；simple=False（內部/館方版）：顯示全部。
-    觀察紀錄數不受此過濾影響。
+    simple=True（公開/簡易版）：僅排除自動建立（待查證）物種；未鑑定標本一律計入。
+    simple=False（內部/館方版）：顯示全部。觀察紀錄數不受此過濾影響。
     """
     species_qs = Species.objects.all()
     specimen_qs = Specimen.objects.all()
     if simple:
         species_qs = species_qs.exclude(is_auto_created=True)
-        specimen_qs = specimen_qs.exclude(
-            identification_status=Specimen.IdentificationStatus.UNIDENTIFIED
-        )
 
     species_by_group = _count_map(species_qs, "taxon_group")
     # 標本改用自身的 taxon_group 統計，使「未鑑定標本」也計入所屬類群（不再漏算）

@@ -95,7 +95,6 @@
 
   {% if not is_research %}
     <p class="muted" style="margin-top:22px; font-size:12px;">
-      本館部分標本尚在鑑定或查證中，未於此頁呈現。完整館藏狀態請切換至<a
-        href="?view=research{% if q %}&q={{ q|urlencode }}{% endif %}{% if group %}&taxon_group={{ group|urlencode }}{% endif %}{% if status %}&conservation_status={{ status|urlencode }}{% endif %}">研究檢視</a>。</p>
+      本館部分標本尚在鑑定中，其分類資訊將隨研究進度陸續更新。</p>
   {% endif %}
 {% endblock %}

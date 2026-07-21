@@ -220,18 +220,11 @@ def public_species_list(request):
 def public_species_export(request):
     """把目前的查詢結果匯出成 CSV（僅公開可見欄位；不含捐贈者姓名與精確座標）。
 
-    跟隨同一個 view 參數：簡易版匯出過濾後資料集（排除自動建立物種、標本數不計
-    未鑑定）；研究檢視匯出全部。此匯出為物種層級、本就不含精確座標等敏感欄位。
+    跟隨同一個 view 參數：簡易版排除自動建立（待查證）物種；研究檢視匯出全部。
+    未鑑定標本一律計入館藏標本數。此匯出為物種層級、本就不含精確座標等敏感欄位。
     """
     species, _q, _group, _status = _filtered_species(request)
-    if _is_research(request):
-        species = species.annotate(n_specimens=Count("specimens"))
-    else:
-        # 簡易版：館藏標本數不計「未鑑定」標本，與頁面數字一致
-        species = species.annotate(n_specimens=Count(
-            "specimens",
-            filter=~Q(specimens__identification_status=Specimen.IdentificationStatus.UNIDENTIFIED),
-        ))
+    species = species.annotate(n_specimens=Count("specimens"))
 
     columns = [
         ("中文名", lambda s: s.common_name),
@@ -274,14 +267,18 @@ def public_species_detail(request, pk):
 
     protected = species.conservation_status != Species.ConservationStatus.GENERAL
 
-    # 標本：簡易版排除「未鑑定」標本；研究檢視顯示全部。
+    # 標本：未鑑定標本不再排除，簡易版與研究檢視都顯示（僅以「鑑定中」標示）。
     specimen_qs = species.specimens.prefetch_related(
         "identifications__identified_as"
     )
-    if not is_research:
-        specimen_qs = specimen_qs.exclude(
-            identification_status=Specimen.IdentificationStatus.UNIDENTIFIED
-        )
+
+    # 種名為空時的最低分類階層 fallback（種→屬→科→目→類群），避免留下空白
+    def _taxon_label(sp):
+        for rank in (species.scientific_name, species.genus,
+                     species.family, species.order):
+            if rank:
+                return rank
+        return sp.get_taxon_group_display()
 
     specimens = []
     for sp in specimen_qs:
@@ -304,6 +301,9 @@ def public_species_detail(request, pk):
             "locality": locality,              # 僅縣市層級
             "identified_by": sp.identified_by,  # 鑑定者（非採集者/來源）
             "history": history,
+            # 未鑑定 → 標示「鑑定中」；分類資訊以最低已知階層呈現，不留白
+            "is_pending": sp.identification_status == Specimen.IdentificationStatus.UNIDENTIFIED,
+            "taxon_label": _taxon_label(sp),
         })
 
     # ---- 影像藝廊（隱私與權限一律在後端 queryset 過濾）----

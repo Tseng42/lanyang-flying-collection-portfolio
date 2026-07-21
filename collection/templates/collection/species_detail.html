@@ -133,6 +133,8 @@
         <div class="spec-head">
           <span class="cat">{{ sp.catalog }}</span>
           <span class="tag grp">{{ sp.type }}</span>
+          {% if sp.is_pending %}<span class="tag cons-unverified">鑑定中</span>{% endif %}
+          <span class="muted" style="font-size:13px;">分類：{{ sp.taxon_label }}</span>
           <span class="muted" style="font-size:13px;">採集日期：{{ sp.date|default:"—" }}</span>
           <span class="muted" style="font-size:13px;">地點（縣市）：{{ sp.locality|default:"—" }}</span>
           <span class="muted" style="font-size:13px;">鑑定者：{{ sp.identified_by|default:"—" }}</span>
