@@ -23,6 +23,8 @@ from unfold.forms import (
     UserChangeForm,
     UserCreationForm,
 )
+# unfold 的輸入框樣式類別；套到宣告式表單欄位（非 model 欄位不會被 unfold 自動套用）
+from unfold.widgets import INPUT_CLASSES
 
 from .models import (
     CATALOG_NUMBER_RE, Identification, Movement, Observation,
@@ -108,15 +110,17 @@ class SpecimenAdminForm(forms.ModelForm):
     """標本表單：學名可直接打字（後端比對既有物種，找不到則自動建立）；
     同時保留 species 下拉選取與「＋新增物種」彈窗，供使用者依習慣選擇。"""
 
-    # 學名純文字輸入（無 JS）；儲存時由後端比對／自動建立並設定 species FK
+    # 學名純文字輸入（標準 forms.TextInput，無自訂 widget／template、無 JS）。
+    # 因是宣告式表單欄位（非 model 欄位），unfold 不會自動套用輸入框樣式，
+    # 故以標準 widget 的 attrs 帶入 unfold 的 INPUT_CLASSES，否則輸入框無框線近乎不可見。
     species_input = forms.CharField(
         required=False,
         label="學名",
         help_text=(
             "可直接輸入學名或中文俗名。若系統中已有相符的物種會自動連結，"
             "沒有則會自動建立一筆新物種（保育等級預設「待查證」）。尚未鑑定可留空。"
-            "（若想改用下方選單挑選既有物種，請先清空此欄位。）"
         ),
+        widget=forms.TextInput(attrs={"class": " ".join(INPUT_CLASSES)}),
     )
     confirm_duplicate = forms.BooleanField(
         required=False,
@@ -137,14 +141,6 @@ class SpecimenAdminForm(forms.ModelForm):
         if self.instance and self.instance.pk and self.instance.species_id:
             self.fields["species_input"].initial = (
                 self.instance.species.scientific_name
-            )
-        # 保留下拉／＋新增彈窗，但標示為輔助路徑（文字輸入優先）
-        if "species" in self.fields:
-            self.fields["species"].required = False
-            self.fields["species"].label = "（或）選取既有物種"
-            self.fields["species"].help_text = (
-                "可從下拉選取既有物種，或按右側＋開啟彈窗完整新增一筆。"
-                "若上方「學名」已輸入，將以上方為準。"
             )
 
     @staticmethod
@@ -168,8 +164,8 @@ class SpecimenAdminForm(forms.ModelForm):
 
     class Meta:
         model = Specimen
-        # species 納入表單以提供下拉／＋新增彈窗；文字輸入優先，於 save_model 解析
-        fields = "__all__"
+        # 排除 species：學名改由 species_input 純文字輸入，於 save_model 解析設定
+        exclude = ("species",)
         # 中文說明文字（設在表單層，不更動資料模型）
         help_texts = {
             "catalog_number": (
@@ -177,7 +173,6 @@ class SpecimenAdminForm(forms.ModelForm):
                 "類群代碼：鳥=AV、昆蟲=IN、蝙蝠飛鼠=MA。"
                 "選好物種後系統會自動建議下一個可用編號，可自行修改；留空存檔亦會自動產生。"
             ),
-            "species": "此標本所屬物種（學名）。可輸入關鍵字搜尋選取。",
             "specimen_type": "標本的製作方式（剝製／針插／浸液／骨骼）。",
             "collector": "採集者姓名。基於隱私，公開頁不會顯示。",
             "collection_date": "標本的採集日期。",
@@ -212,8 +207,8 @@ class SpecimenAdminForm(forms.ModelForm):
         date = cleaned.get("collection_date")
         confirmed = cleaned.get("confirm_duplicate")
 
-        # ── 學名解析：文字輸入優先；留空則用下拉選取的物種 ──
-        # 相似度不再阻擋儲存，改於 save_model 以警告訊息事後提示（第 9 點）。
+        # ── 學名解析（純文字輸入）：去空白後 iexact 比對學名／中文名 ──
+        # 相似度不阻擋儲存，改於 save_model 以警告訊息事後提示（第 9 點）。
         raw = (cleaned.get("species_input") or "").strip()
         self.resolved_species = None    # 比對到的既有物種
         self.new_species_name = None    # 需自動建立的學名（無比對時）
@@ -225,9 +220,7 @@ class SpecimenAdminForm(forms.ModelForm):
                 self.resolved_species = match
             else:
                 self.new_species_name = raw
-        else:
-            # 文字留空 → 用下拉／彈窗選取的物種（可能為 None＝未鑑定）
-            self.resolved_species = cleaned.get("species")
+        # raw 為空 → species=None（未鑑定）
 
         # 供重複偵測使用（僅在比對到既有物種時才有意義；新建物種不可能重複）
         species = self.resolved_species
@@ -537,20 +530,17 @@ class SpecimenAdmin(ModelAdmin):
         "species__common_name", "collector", "collection_location",
     )
     date_hierarchy = "accession_date"
-    # 保留物種下拉的搜尋 + 右側「＋新增物種」彈窗（供打字以外的完整填寫路徑）
-    autocomplete_fields = ("species",)
 
     fieldsets = (
         ("基本資料", {
             "fields": (
                 "catalog_number", "taxon_group", "identification_status",
-                "species_input", "species", "specimen_type", "basis_of_record",
+                "species_input", "specimen_type", "basis_of_record",
             ),
             "description": (
-                "必填：<b>類群</b>、<b>標本類型</b>。<b>學名</b>可直接於上方輸入框打字："
+                "必填：<b>類群</b>、<b>標本類型</b>。<b>學名</b>可直接輸入："
                 "比對到既有物種即沿用，找不到會自動建立（保育等級「待查證」）；"
-                "也可改用下方「選取既有物種」下拉／＋新增彈窗（需先清空學名輸入框）。"
-                "尚未鑑定可留空。典藏編號留空會自動產生。"
+                "尚未鑑定可留空、待鑑定後補填。典藏編號留空會自動產生。"
             ),
         }),
         ("標本製作與來源", {
