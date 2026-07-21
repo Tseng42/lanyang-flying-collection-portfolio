@@ -89,6 +89,10 @@ class Species(models.Model):
         "物種介紹", blank=True, default="",
         help_text="公開頁面顯示的物種簡介。",
     )
+    public_description = models.TextField(
+        "公開簡介", blank=True, default="",
+        help_text="顯示於公開檢索頁簡易版的物種介紹，建議 80 到 120 字，語氣平易近人。",
+    )
     # 最後更新時間：存檔時自動更新，供公開頁顯示「資料最後更新」與學術引用
     updated_at = models.DateTimeField("最後更新", auto_now=True)
     is_auto_created = models.BooleanField(

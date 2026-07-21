@@ -38,8 +38,21 @@
         <span class="tag cons-{{ species.conservation_status }}">{{ species.get_conservation_status_display }}</span>
         <span class="tag grp">IUCN：{{ species.get_iucn_status_display }}</span>
       </div>
-      <div class="card-title">物種介紹</div>
-      <p class="intro-text">{{ species.introduction|default:"（本物種介紹尚待補充。）"|linebreaksbr }}</p>
+      {% if not is_research %}
+        {# 簡易版：只顯示公開簡介；為空則整個介紹區塊不顯示（無 fallback、無空框） #}
+        {% if species.public_description %}
+          <div class="card-title">物種介紹</div>
+          <p class="intro-text">{{ species.public_description|linebreaksbr }}</p>
+        {% endif %}
+      {% else %}
+        {# 研究檢視：公開簡介（若有）置於既有描述之上；既有描述維持原本內容與位置 #}
+        {% if species.public_description %}
+          <div class="card-title">公開簡介</div>
+          <p class="intro-text">{{ species.public_description|linebreaksbr }}</p>
+        {% endif %}
+        <div class="card-title">物種介紹</div>
+        <p class="intro-text">{{ species.introduction|default:"（本物種介紹尚待補充。）"|linebreaksbr }}</p>
+      {% endif %}
       <div class="muted" style="font-size:12px; margin-top:14px; padding-top:12px; border-top:1px solid var(--bd);">
         資料最後更新：{{ species.updated_at|date:"Y-m-d" }}</div>
     </div>

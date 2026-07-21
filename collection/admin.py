@@ -402,7 +402,7 @@ class SpeciesAdmin(ModelAdmin):
         }),
         ("物種介紹", {
             "classes": ["collapse"],
-            "fields": ("introduction",),
+            "fields": ("public_description", "introduction"),
         }),
     )
 
