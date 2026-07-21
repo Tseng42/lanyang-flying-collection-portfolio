@@ -302,5 +302,16 @@
     </nav>
     © 蘭陽博物館 飛行生物典藏系統
   </footer>
+  <script>
+    // 簡易版／研究檢視切換（列表頁與詳細頁共用）：以帶或不帶 ?view=research 的
+    // 網址重新載入；其餘查詢參數（搜尋字、分類群、保育等級等）一律保留。
+    function setView(mode){
+      var url = new URL(window.location.href);
+      if (mode === 'research') { url.searchParams.set('view', 'research'); }
+      else { url.searchParams.delete('view'); }
+      url.searchParams.delete('switched');   // 清掉一次性提示參數
+      window.location.href = url.toString();
+    }
+  </script>
 </body>
 </html>

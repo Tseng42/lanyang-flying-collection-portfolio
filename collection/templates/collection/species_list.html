@@ -9,6 +9,8 @@
 
   <div class="panel">
     <form class="search-form" method="get">
+      {# 保留目前檢視：研究檢視時搜尋不會掉回簡易版 #}
+      {% if is_research %}<input type="hidden" name="view" value="research">{% endif %}
       <div class="field">
         <label for="id_q">搜尋（學名／中文名）</label>
         <input type="text" id="id_q" name="q" value="{{ q }}" placeholder="例如 Egretta 或 小白鷺" autocomplete="off">
@@ -33,6 +35,17 @@
       </div>
       <button class="btn navy" type="submit">查詢</button>
     </form>
+  </div>
+
+  <!-- 簡易版／研究檢視切換（沿用詳細頁的 .view-toggle 樣式與共用 setView） -->
+  <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:16px;">
+    <span class="muted" style="font-size:13px;">檢視：</span>
+    <div class="view-toggle">
+      <button type="button" onclick="setView('simple')"
+        style="{% if not is_research %}background:var(--gold); color:#fff;{% else %}background:#fbf7ee; color:var(--muted);{% endif %}">簡易版</button>
+      <button type="button" onclick="setView('research')"
+        style="{% if is_research %}background:var(--gold); color:#fff;{% else %}background:#fbf7ee; color:var(--muted);{% endif %}">研究檢視</button>
+    </div>
   </div>
 
   {% if species_list %}

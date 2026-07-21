@@ -268,14 +268,5 @@
     })();
   </script>
 
-  <script>
-    // 切換檢視：以帶 ?view 參數的網址重新載入，由後端決定要不要渲染研究區塊
-    function setView(mode){
-      var url = new URL(window.location.href);
-      if (mode === 'research') { url.searchParams.set('view', 'research'); }
-      else { url.searchParams.delete('view'); }
-      url.searchParams.delete('switched');   // 清掉一次性提示參數
-      window.location.href = url.toString();
-    }
-  </script>
+  {# setView 已移至 base_public.html 全站共用，列表頁與詳細頁行為一致 #}
 {% endblock %}
