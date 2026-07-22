@@ -153,6 +153,11 @@ def privacy_policy(request):
     return render(request, "collection/privacy.html")
 
 
+def data_license(request):
+    """資料授權聲明與引用格式頁（試營運草稿版）；靜態內容，無需資料庫查詢。"""
+    return render(request, "collection/license.html")
+
+
 def _filtered_species(request):
     """依查詢參數過濾物種，回傳 (queryset, q, group, status)。列表與匯出共用。
 

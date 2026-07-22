@@ -1,0 +1,183 @@
+{% extends "collection/base_public.html" %}
+
+{% block title %}資料授權聲明與引用格式｜蘭陽博物館飛行生物典藏資料庫{% endblock %}
+
+{% block head_extra %}
+<style>
+  /* 資料授權頁：沿用與隱私權政策頁完全一致的版面與樣式 */
+  .policy-doc{ max-width:760px; margin:0 auto; }
+  .policy-doc h1{ font-size:30px; margin-bottom:6px; }
+  .policy-doc h2{ font-family:var(--serif); font-size:21px; color:var(--navy-ink); font-weight:700;
+                  margin:38px 0 14px; border-left:4px solid var(--gold); padding-left:12px; }
+  .policy-doc h3{ font-family:var(--serif); font-size:17px; color:var(--navy-2); font-weight:700;
+                  margin:24px 0 8px; }
+  .policy-doc p{ margin:0 0 14px; color:#3a352d; }
+  .policy-doc ul{ margin:0 0 14px; padding-left:22px; }
+  .policy-doc li{ margin:5px 0; }
+  .policy-updated{ color:var(--muted); font-size:13px; margin:0 0 8px; }
+
+  /* 草稿提示橫幅：明顯但不干擾閱讀 */
+  .draft-banner{ display:flex; gap:10px; align-items:flex-start;
+                 background:#fbf6df; border:1px solid #e6cf8a; border-left:5px solid var(--gold);
+                 color:var(--gold-dk); border-radius:12px; padding:13px 16px; margin:0 0 26px;
+                 font-size:14px; line-height:1.7; }
+  .draft-banner .ico{ font-size:18px; line-height:1.5; }
+
+  /* 政策內文表格 */
+  .policy-doc table{ width:100%; border-collapse:collapse; margin:6px 0 18px;
+                     font-size:14px; background:var(--paper);
+                     border:1px solid var(--bd); border-radius:12px; overflow:hidden; }
+  .policy-doc caption{ text-align:left; font-size:13px; color:var(--muted);
+                       margin-bottom:6px; letter-spacing:.3px; }
+  .policy-doc th, .policy-doc td{ text-align:left; padding:10px 13px;
+                                  border-bottom:1px solid var(--bd); vertical-align:top; }
+  .policy-doc thead th{ background:var(--sand); color:var(--navy-ink); font-weight:700; }
+  .policy-doc tbody th{ background:#faf6ec; color:var(--navy-ink); font-weight:600;
+                        white-space:nowrap; }
+  .policy-doc tbody tr:last-child th, .policy-doc tbody tr:last-child td{ border-bottom:none; }
+  .policy-doc code{ font-family:"SFMono-Regular",Consolas,Menlo,monospace; font-size:13px;
+                    background:#eef2f7; padding:1px 6px; border-radius:5px; }
+
+  /* 說明／警語區塊（對應 md 的 blockquote） */
+  .policy-note{ background:#eef2f7; border-left:4px solid var(--navy-2); border-radius:8px;
+                padding:12px 16px; margin:0 0 16px; color:#33405a; font-size:14px; line-height:1.75; }
+  .policy-note.warn{ background:#fbeae8; border-left-color:var(--c-endangered); color:#7a2019; }
+  .policy-note strong{ color:inherit; }
+
+  /* 引用範例：沿用色票的等寬區塊，方便使用者整段複製 */
+  .cite-example{ background:var(--paper); border:1px solid var(--bd); border-left:4px solid var(--gold);
+                 border-radius:10px; padding:13px 16px; margin:0 0 16px;
+                 font-family:"SFMono-Regular",Consolas,Menlo,monospace; font-size:13px;
+                 line-height:1.85; color:#3a352d; white-space:pre-wrap; word-break:break-word; }
+
+  /* 待補事項清單：明顯視覺區隔，一眼看出尚未完成 */
+  .todo-block{ background:#fff8e6; border:2px dashed #d9a441; border-radius:14px;
+               padding:18px 20px; margin:14px 0 8px; }
+  .todo-block .todo-flag{ display:inline-block; background:var(--gold); color:#fff;
+                          font-size:12px; font-weight:700; letter-spacing:.5px;
+                          border-radius:999px; padding:3px 12px; margin-bottom:10px; }
+  .todo-list{ list-style:none; padding-left:0; margin:6px 0 0; }
+  .todo-list li{ position:relative; padding-left:30px; margin:8px 0; color:#5a4a25; }
+  .todo-list li::before{ content:"☐"; position:absolute; left:2px; top:-1px;
+                         font-size:18px; color:var(--gold-dk); }
+
+  @media (max-width:640px){
+    .policy-doc h1{ font-size:24px; }
+    /* 表格在窄螢幕可橫向捲動，避免擠壓 */
+    .policy-doc table{ display:block; overflow-x:auto; white-space:normal; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<article class="policy-doc">
+  <a class="backlink" href="{% url 'home' %}">← 回首頁</a>
+
+  <!-- 草稿提示橫幅（頁面附加說明，非聲明內文） -->
+  <div class="draft-banner" role="note">
+    <span class="ico" aria-hidden="true">⚠️</span>
+    <span>本頁為試營運版本，內容尚未經館方審核，正式發布前將另行更新。</span>
+  </div>
+
+  <h1>資料授權聲明與引用格式</h1>
+  <p class="policy-updated">最後更新：2026-07-22（草稿）</p>
+
+  <div class="policy-note">
+    <strong>狀態：草稿（個人專案版）</strong><br>
+    本版本適用於本系統交付館方前之測試與試營運階段。以下授權選項均為<strong>建議</strong>，最終授權條件與引用方式，須經館方權責單位裁示後，以館方正式公告為準。
+  </div>
+
+  <h2>一、前言</h2>
+  <p>本聲明說明「蘭陽博物館飛行生物標本典藏資料庫」（以下簡稱本系統）對外提供之資料與素材，其授權條件與建議引用方式。</p>
+  <p><strong>適用範圍：</strong>透過本系統公開介面提供之典藏資料 Metadata、影像檔案，以及本系統之原始碼。</p>
+  <p><strong>不適用範圍：</strong>本系統所連結之第三方資源（如 TaiCOL、GBIF、iNaturalist、Macaulay Library 等）之內容，其授權與使用條件適用各該來源之規定，請逕依其網站說明辦理。</p>
+
+  <h2>二、資料授權條款</h2>
+  <p>本系統之典藏資料 Metadata、影像檔案與系統原始碼三者性質不同，<strong>可能適用不同授權</strong>。下表列出各類別之建議授權選項，供館方裁示：</p>
+  <table>
+    <caption>各類資料之建議授權選項（尚待館方裁示）</caption>
+    <thead>
+      <tr><th scope="col">資料類別</th><th scope="col">內容範圍</th><th scope="col">建議授權選項</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th scope="row">典藏資料 Metadata</th>
+        <td>物種、標本、觀察紀錄等結構化欄位資料（不含影像檔案本身）</td>
+        <td>建議 <code>CC0 1.0</code>（公眾領域貢獻）或 <code>CC BY 4.0</code>（姓名標示）〔待館方裁示〕</td>
+      </tr>
+      <tr>
+        <th scope="row">影像檔案</th>
+        <td>標本照、生態照、棲地照等影像</td>
+        <td>建議 <code>CC BY 4.0</code> 或 <code>CC BY-NC 4.0</code>（姓名標示—非商業性）；須一併考量攝影者著作權〔待館方裁示〕</td>
+      </tr>
+      <tr>
+        <th scope="row">系統原始碼</th>
+        <td>本系統之程式碼與設定</td>
+        <td>〔待補：由館方與開發者議定，例如 <code>MIT</code>、<code>GPL-3.0</code> 或不對外開源〕</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="policy-note warn">
+    <strong>⚠️ 上述僅為建議選項，尚未定案。</strong><br>
+    實際授權方式應由館方權責單位裁示，本頁不代館方作成決定。在正式公告前，請勿逕行依上述建議選項再利用本系統資料。
+  </div>
+  <div class="policy-note">
+    📌 個別影像若另有標示授權（見各影像之「授權方式」欄位），以該個別標示為準。
+  </div>
+
+  <h2>三、引用格式</h2>
+  <p>正式授權公告前，若需於研究或報導中引用本系統資料，建議採下列格式，並務必註明<strong>取用日期</strong>（資料可能隨研究進度更新）。以下數值均為<strong>格式範例</strong>，非真實引用。</p>
+
+  <h3>3.1 資料庫層級引用</h3>
+  <div class="cite-example">蘭陽博物館（〔待補：發布年份〕）。蘭陽博物館飛行生物標本典藏資料庫〔待補：正式資料庫名稱〕。取用日期：YYYY-MM-DD。網址：〔待補：正式網址〕</div>
+
+  <h3>3.2 單筆標本引用</h3>
+  <p>單筆標本引用建議包含館藏編號（<code>catalogNumber</code>）與全球唯一識別碼（<code>occurrenceID</code>，採 <code>urn:uuid</code> 格式）：</p>
+  <div class="cite-example">蘭陽博物館。小白鷺（Egretta garzetta）〔範例〕。catalogNumber：LYM-AV-2026-0001。occurrenceID：urn:uuid:0a1b2c3d-4e5f-6789-abcd-ef0123456789。取用日期：YYYY-MM-DD。網址：〔待補：單筆標本永久網址格式〕</div>
+  <div class="policy-note">
+    📌 各標本詳細頁另提供可一鍵複製之「建議引用格式」，實際引用請以該頁顯示者為準。
+  </div>
+
+  <h2>四、保育類物種資料之使用限制</h2>
+  <p>本節呼應〈隱私權與資料使用政策〉第四節（保育類物種資料之特別處理）。再利用本系統資料時，須遵守下列限制：</p>
+  <ol>
+    <li><strong>座標模糊化</strong>　依《野生動物保育法》公告之保育類野生動物，其地點座標於公開介面一律模糊化至<strong>縣市層級</strong>；引用或再利用時不得試圖還原或推導其精確棲地位置。</li>
+    <li><strong>分級檢視</strong>　完整之地理資訊僅提供經審核之研究人員於登入後查閱，並留存查閱紀錄。</li>
+    <li><strong>研究用途申請</strong>　研究人員如需取得精確地理資料，請依〈隱私權與資料使用政策〉第八節之聯絡方式提出申請，並說明研究目的與資料使用範圍。</li>
+  </ol>
+  <p>相關細節請參閱 <a href="{% url 'privacy' %}">隱私權與資料使用政策</a>。</p>
+
+  <h2>五、免責聲明</h2>
+  <ul>
+    <li>本系統部分標本<strong>仍在鑑定中</strong>，其分類資訊（學名、鑑定狀態、分類階層等）<strong>可能隨研究進度更新或修訂</strong>。</li>
+    <li>引用時請註明取用日期，並自行留意所引用之資料可能已有更新。</li>
+    <li>本系統盡力維護資料之正確性與完整性，惟不就其正確性、完整性或適用於特定用途作任何明示或默示之保證。</li>
+  </ul>
+
+  <h2>六、聯絡方式</h2>
+  <p>如對本聲明之授權條款或引用方式有任何疑問，請聯繫：</p>
+  <p>
+    〔待補：授權與引用相關聯絡窗口名稱〕<br>
+    〔待補：電子郵件〕<br>
+    〔待補：聯絡電話〕
+  </p>
+  <div class="policy-note">
+    📌 涉及個人資料之查詢或權利行使，請另依〈隱私權與資料使用政策〉第八節辦理。
+  </div>
+
+  <h2>七、待補事項清單</h2>
+  <div class="todo-block" role="group" aria-label="待補事項清單（尚未完成）">
+    <span class="todo-flag">尚未完成</span>
+    <div class="policy-note" style="margin-bottom:12px;">以下項目須於正式發布前由館方確認，發布時請刪除本節。</div>
+    <ul class="todo-list">
+      <li>由館方裁示典藏資料 Metadata、影像檔案、系統原始碼三者之正式授權條款</li>
+      <li>確認影像檔案之攝影者著作權歸屬與授權範圍</li>
+      <li>補齊正式資料庫名稱、發布年份、正式網址，以及單筆標本永久網址格式</li>
+      <li>確認單筆標本引用是否以 occurrenceID（urn:uuid）作為對外永久識別碼</li>
+      <li>補齊第六節之授權與引用聯絡窗口資訊</li>
+      <li>與〈隱私權與資料使用政策〉之保育類資料條款交叉核對，確保用語一致</li>
+      <li>經館方權責單位（如秘書室、資訊單位或法制窗口）審核後正式發布</li>
+    </ul>
+  </div>
+</article>
+{% endblock %}
