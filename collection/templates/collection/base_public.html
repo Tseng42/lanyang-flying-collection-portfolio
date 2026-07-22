@@ -296,14 +296,7 @@
     {% block content %}{% endblock %}
   </main>
   {% endblock %}
-  <footer class="site">
-    <nav class="site-foot-nav" aria-label="頁尾導覽">
-      <a href="{% url 'privacy' %}">隱私權政策</a>
-      ·
-      <a href="{% url 'license' %}">資料授權聲明</a>
-    </nav>
-    © 蘭陽博物館 飛行生物典藏系統
-  </footer>
+  {% include "collection/_footer.html" %}
   <script>
     // 簡易版／研究檢視切換（列表頁與詳細頁共用）：以帶或不帶 ?view=research 的
     // 網址重新載入；其餘查詢參數（搜尋字、分類群、保育等級等）一律保留。

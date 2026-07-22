@@ -53,9 +53,13 @@
       <p class="muted" style="margin:0;" role="status" aria-live="polite">
         {% if searched %}共 {{ total }} 筆結果{% else %}尚未輸入查詢條件，以下顯示全部 {{ total }} 筆物種{% endif %}
       </p>
-      <a class="btn navy" style="padding:8px 16px; font-size:14px;"
-         href="{% url 'public_species_export' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}">
-        <span aria-hidden="true">⬇</span> 匯出查詢結果 CSV</a>
+      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+        <a class="btn navy" style="padding:8px 16px; font-size:14px;"
+           href="{% url 'public_species_export' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}">
+          <span aria-hidden="true">⬇</span> 匯出查詢結果 CSV</a>
+        <p class="muted" style="margin:0; font-size:12px;">
+          下載前請參閱<a href="{% url 'license' %}">資料授權聲明</a></p>
+      </div>
     </div>
     <div class="species-grid">
       {% for s in species_list %}

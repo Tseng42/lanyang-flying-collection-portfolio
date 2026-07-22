@@ -6,8 +6,10 @@
 
 import csv
 import difflib
+import io
 import json
 import re
+import zipfile
 
 from django import forms
 from django.contrib import admin, messages
@@ -16,7 +18,8 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
-from django.urls import path
+from django.urls import path, reverse
+from django.utils import timezone
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.forms import (
@@ -52,6 +55,45 @@ DWC_LIFE_STAGE = {
     Specimen.LifeStage.ADULT: "adult",        # 成體
     # 不明、未填 → 由 .get(..., "") 產生空字串
 }
+
+
+def _dwc_export_readme(request):
+    """Darwin Core 匯出附帶的授權與來源說明（獨立說明檔內容）。
+
+    採「獨立說明檔」而非 CSV 檔首的井字號註解列，理由：
+    (1) 註解列會破壞嚴格 CSV／Darwin Core Archive 解析器對標題列的判讀；
+    (2) 授權尚待館方裁示，不宜在每列 license 欄位寫死未定案的授權值。
+    """
+    try:
+        license_url = request.build_absolute_uri(reverse("license"))
+    except Exception:  # noqa: BLE001 — 反查失敗仍要能匯出，退回相對路徑
+        license_url = "/license/"
+    now = timezone.localtime().strftime("%Y-%m-%d %H:%M")
+    return (
+        "蘭陽博物館 飛行生物典藏系統\n"
+        "Darwin Core 匯出資料 — 授權與來源說明\n"
+        f"匯出時間：{now}\n"
+        "\n"
+        "【狀態】\n"
+        "本資料為試營運階段之匯出，內容與授權尚未經館方正式審核。\n"
+        "\n"
+        "【授權】\n"
+        "本資料之授權條款尚待館方裁示，正式公告前請勿逕行再利用。\n"
+        f"授權建議選項與最新狀態請見「資料授權聲明」頁：\n{license_url}\n"
+        "\n"
+        "【來源】\n"
+        "資料來源：蘭陽博物館（Darwin Core institutionCode：LYM）。\n"
+        "個別標本之來源單位與主管機關許可文號（若有）記於 CSV 的\n"
+        "dynamicProperties 欄位（sourceInstitution／permitNumber）。\n"
+        "\n"
+        "【保育類資料限制】\n"
+        "保育類物種之精確座標一律模糊化，CSV 以 informationWithheld 欄位標示；\n"
+        "不得試圖還原或推導精確棲地位置。\n"
+        "\n"
+        "【引用】\n"
+        "資料庫層級與單筆標本引用格式見上述授權聲明頁第三節；\n"
+        "單筆引用請包含 catalogNumber 與 occurrenceID（urn:uuid）。\n"
+    )
 
 
 # 登入頁改用「繼承自 unfold 登入頁」的模板（僅在 login_after 附加密碼顯示切換，
@@ -822,22 +864,37 @@ class SpecimenAdmin(ModelAdmin):
             ("dynamicProperties", dwc_dynamic_properties),
         ]
 
-        response = HttpResponse(content_type="text/csv; charset=utf-8")
-        response["Content-Disposition"] = (
-            'attachment; filename="specimens_darwincore.csv"'
-        )
-        # 於檔首寫入單一 BOM 供 Excel 正確判讀 UTF-8 中文。
-        # 不可用 charset=utf-8-sig：那會使每次 writerow 各自加一個 BOM，
-        # 污染每列第一欄（例如 occurrenceID 會變成 BOM+urn:uuid:…）。
-        response.write("﻿")
-        writer = csv.writer(response)
+        # 先把 CSV 寫進字串緩衝區（檔首單一 BOM 供 Excel 正確判讀 UTF-8 中文）。
+        csv_buffer = io.StringIO()
+        csv_buffer.write("﻿")
+        writer = csv.writer(csv_buffer)
         writer.writerow([name for name, _ in columns])
         for specimen in queryset:
             writer.writerow([getter(specimen) for _, getter in columns])
 
+        # 授權與來源資訊改以「獨立說明檔」隨附，與 CSV 一起打包成 ZIP：
+        # 不在 CSV 內加井字號註解列，避免破壞嚴格 CSV／DwC-Archive 解析器。
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(
+                "specimens_darwincore.csv",
+                csv_buffer.getvalue().encode("utf-8"),
+            )
+            zf.writestr(
+                "授權與來源說明.txt",
+                _dwc_export_readme(request).encode("utf-8"),
+            )
+
+        response = HttpResponse(
+            zip_buffer.getvalue(), content_type="application/zip",
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="specimens_darwincore.zip"'
+        )
         self.message_user(
             request,
-            f"已匯出 {queryset.count()} 筆標本為 Darwin Core CSV。",
+            f"已匯出 {queryset.count()} 筆標本為 Darwin Core CSV"
+            "（ZIP 內含授權與來源說明.txt）。",
             level=messages.INFO,
         )
         return response
