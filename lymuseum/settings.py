@@ -181,6 +181,11 @@ TIME_ZONE = 'Asia/Taipei'
 
 USE_I18N = True
 
+# 專案層級翻譯覆寫（優先於 Django/unfold 內建 catalog）。
+# 用於將登入頁「忘記密碼」等字串改為指定的繁體中文，
+# 不需修改 unfold 或 Django 套件內的檔案。
+LOCALE_PATHS = [BASE_DIR / 'locale']
+
 USE_TZ = True
 
 
@@ -254,6 +259,22 @@ LOGGING = {
         },
     },
 }
+
+
+# 寄信設定（供後台「忘記密碼」重設信使用）
+# 一律由環境變數控制，不把任何帳號密碼寫進程式碼。
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'webmaster@localhost')
+
+# DEBUG 或未設定 EMAIL_HOST 時一律用 console backend（不實際寄信、印到主控台/log）。
+if DEBUG or not EMAIL_HOST:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
 
 # django-unfold 後台外觀設定

@@ -1,0 +1,9 @@
+{# 繼承 unfold 的登入頁，僅在 login_after 附加密碼顯示切換用的純 JS。 #}
+{# 不整份複製 unfold 登入頁，日後 unfold 更新仍會生效。 #}
+{% extends "admin/login.html" %}
+{% load static %}
+
+{% block login_after %}
+    {{ block.super }}
+    <script src="{% static 'collection/js/password_toggle.js' %}"></script>
+{% endblock %}

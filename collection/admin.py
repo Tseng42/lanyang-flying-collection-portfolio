@@ -32,6 +32,11 @@ from .models import (
 )
 
 
+# 登入頁改用「繼承自 unfold 登入頁」的模板（僅在 login_after 附加密碼顯示切換，
+# 不整份複製，避免日後 unfold 更新失效）。
+admin.site.login_template = "admin/login_toggle.html"
+
+
 def _county_of(text):
     """從自由文字地點擷取到「縣／市」為止的縣市層級字串（供 DwC stateProvince）。"""
     if not text:
