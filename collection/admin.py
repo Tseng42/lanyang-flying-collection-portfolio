@@ -6,6 +6,7 @@
 
 import csv
 import difflib
+import json
 import re
 
 from django import forms
@@ -30,6 +31,27 @@ from .models import (
     CATALOG_NUMBER_RE, CollectionEvent, Identification, Movement, Observation,
     ObservationImage, Species, SpeciesImage, Specimen, SpecimenImage,
 )
+
+
+# ── Darwin Core 匯出專用的「值」對照 ──────────────────────────────
+# 僅在 CSV 匯出這一層把中文選項轉成 DwC 控制詞彙；資料庫、Admin 介面、
+# 公開頁面一律維持 choices 的中文標籤不變。鍵為 Specimen 的 choices 值
+# （即中文標籤所對應的內部值），未列入者（含「不明」）一律輸出空字串。
+DWC_SEX = {
+    Specimen.Sex.MALE: "male",      # 雄
+    Specimen.Sex.FEMALE: "female",  # 雌
+    # 不明／未鑑別、未填 → 由 .get(..., "") 產生空字串
+}
+DWC_LIFE_STAGE = {
+    Specimen.LifeStage.EGG: "egg",            # 卵
+    Specimen.LifeStage.LARVA: "larva",        # 幼蟲
+    Specimen.LifeStage.NYMPH: "nymph",        # 若蟲
+    Specimen.LifeStage.PUPA: "pupa",          # 蛹
+    Specimen.LifeStage.JUVENILE: "juvenile",  # 幼體
+    Specimen.LifeStage.SUBADULT: "subadult",  # 亞成體
+    Specimen.LifeStage.ADULT: "adult",        # 成體
+    # 不明、未填 → 由 .get(..., "") 產生空字串
+}
 
 
 # 登入頁改用「繼承自 unfold 登入頁」的模板（僅在 login_after 附加密碼顯示切換，
@@ -562,7 +584,8 @@ class SpecimenAdmin(ModelAdmin):
             "fields": (
                 "catalog_number", "occurrence_uuid",
                 "taxon_group", "identification_status",
-                "species_input", "species", "specimen_type", "basis_of_record",
+                "species_input", "species", "specimen_type",
+                "sex", "life_stage", "individual_count", "basis_of_record",
             ),
             "description": (
                 "必填：<b>類群</b>、<b>標本類型</b>。<b>學名</b>可直接於上方輸入框打字："
@@ -576,6 +599,7 @@ class SpecimenAdmin(ModelAdmin):
                 "preparation_status", "preservation_method",
                 "cause_of_death", "cause_of_death_note",
                 "acquisition_type", "acquisition_date",
+                "source_institution", "permit_number",
                 "preparer", "preparation_date", "storage_location",
             ),
             "description": (
@@ -741,6 +765,16 @@ class SpecimenAdmin(ModelAdmin):
                 return ""
             return getattr(ce, attr)
 
+        def dwc_dynamic_properties(s):
+            # 無對應 DwC 標準欄位的來源單位／許可文號，改放 dynamicProperties
+            # （JSON 字串，中文不轉義）。兩者皆未填時輸出空字串，不輸出空的 {}。
+            props = {}
+            if s.source_institution:
+                props["sourceInstitution"] = s.source_institution
+            if s.permit_number:
+                props["permitNumber"] = s.permit_number
+            return json.dumps(props, ensure_ascii=False) if props else ""
+
         # (DwC 欄名, 取值函式)
         columns = [
             # occurrenceID 改用全球唯一 UUID（urn:uuid: 形式）；典藏編號改放 catalogNumber
@@ -757,10 +791,18 @@ class SpecimenAdmin(ModelAdmin):
             ("order", dwc_order),
             ("family", lambda s: sp_attr(s, "family")),
             ("scientificName", lambda s: sp_attr(s, "scientific_name")),
+            # 學名命名者（Species.scientific_name_authorship，可為 None → 空字串）
+            ("scientificNameAuthorship", lambda s: sp_attr(s, "scientific_name_authorship") or ""),
             ("vernacularName", lambda s: sp_attr(s, "common_name")),
             ("taxonID", lambda s: sp_attr(s, "taicol_taxon_id")),
             ("taxonRank", lambda s: RANK.get(s.identification_status, "")),
             ("identificationRemarks", lambda s: s.get_identification_status_display()),
+            # 個體層級（Darwin Core Occurrence）：性別／年齡階段／個體數。
+            # sex／lifeStage 經模組層級對照字典轉為 DwC 控制詞彙；
+            # 「不明」與未填因不在字典中，.get 預設回空字串（符合 DwC 慣例）。
+            ("sex", lambda s: DWC_SEX.get(s.sex, "")),
+            ("lifeStage", lambda s: DWC_LIFE_STAGE.get(s.life_stage, "")),
+            ("individualCount", lambda s: s.individual_count if s.individual_count is not None else ""),
             # 以下採集欄位一律讀採集事件（collection_event），不讀 Specimen 舊欄位
             ("recordedBy", lambda s: ev(s, "collector")),
             ("eventDate", lambda s: dwc_date(ev(s, "collection_date") or None)),
@@ -776,6 +818,8 @@ class SpecimenAdmin(ModelAdmin):
             ("identifiedBy", lambda s: s.identified_by),
             ("dateIdentified", lambda s: dwc_date(s.identified_date)),
             ("institutionCode", lambda s: "LYM"),
+            # 來源單位／許可文號無對應 DwC 標準欄位，統一放 dynamicProperties
+            ("dynamicProperties", dwc_dynamic_properties),
         ]
 
         response = HttpResponse(content_type="text/csv; charset=utf-8")

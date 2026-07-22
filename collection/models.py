@@ -56,6 +56,13 @@ class Species(models.Model):
     scientific_name = models.CharField(
         "學名／拉丁名", max_length=200, unique=True,
     )
+    scientific_name_authorship = models.CharField(
+        "學名命名者", max_length=200, null=True, blank=True,
+        help_text=(
+            "學名的命名者與年份（對應 Darwin Core scientificNameAuthorship），"
+            "例如 (Linnaeus, 1758)。可留空，之後由 TaiCOL 補齊。"
+        ),
+    )
     taicol_taxon_id = models.CharField(
         "TaiCOL 物種編號", max_length=50, blank=True, default="",
     )
@@ -221,6 +228,24 @@ class Specimen(models.Model):
         PINNED = "pinned", "針插"
         FLUID = "fluid", "浸液"
         SKELETON = "skeleton", "骨骼"
+        SLIDE = "slide", "玻片"
+
+    # 個體性別（選項設計適用鳥／昆蟲／蝙蝠／飛鼠四類群）
+    class Sex(models.TextChoices):
+        MALE = "male", "雄"
+        FEMALE = "female", "雌"
+        UNKNOWN = "unknown", "不明／未鑑別"
+
+    # 年齡階段：兼顧昆蟲的變態階段（卵／幼蟲／若蟲／蛹）與鳥獸的成長階段
+    class LifeStage(models.TextChoices):
+        EGG = "egg", "卵"
+        LARVA = "larva", "幼蟲"
+        NYMPH = "nymph", "若蟲"
+        PUPA = "pupa", "蛹"
+        JUVENILE = "juvenile", "幼體（幼鳥／幼獸）"
+        SUBADULT = "subadult", "亞成體"
+        ADULT = "adult", "成體／成蟲"
+        UNKNOWN = "unknown", "不明"
 
     class Source(models.TextChoices):
         DONATION = "donation", "捐贈"
@@ -233,6 +258,7 @@ class Specimen(models.Model):
         LOANED = "loaned", "借出"
         ON_DISPLAY = "on_display", "展示中"
         UNDER_REPAIR = "under_repair", "待修復"
+        DAMAGED = "damaged", "毀損"
         LOST = "lost", "遺失"
 
     # 標本製作狀態（支援冰箱中尚未製作的冷凍標本先行建檔）
@@ -310,6 +336,30 @@ class Specimen(models.Model):
     )
     specimen_type = models.CharField(
         "標本類型", max_length=20, choices=SpecimenType.choices,
+    )
+
+    # 個體資訊（性別／年齡階段／個體數）——皆選填，適用四類群
+    sex = models.CharField(
+        "性別", max_length=20, choices=Sex.choices, null=True, blank=True,
+        help_text=(
+            "標本個體的性別，適用鳥／昆蟲／蝙蝠／飛鼠。"
+            "無法辨別或不確定請選「不明／未鑑別」或留空。"
+        ),
+    )
+    life_stage = models.CharField(
+        "年齡階段", max_length=20, choices=LifeStage.choices,
+        null=True, blank=True,
+        help_text=(
+            "標本個體的生活史階段。昆蟲可選卵／幼蟲／若蟲／蛹／成蟲；"
+            "鳥類與獸類可選幼體／亞成體／成體。不確定請留空。"
+        ),
+    )
+    individual_count = models.PositiveIntegerField(
+        "個體數", null=True, blank=True,
+        help_text=(
+            "此筆標本所含的個體數量（對應 Darwin Core individualCount）；"
+            "預設不填，通常為 1。"
+        ),
     )
 
     # 採集事件（選填）：多件同一次採集的標本共用一筆，避免重複輸入。
@@ -412,6 +462,20 @@ class Specimen(models.Model):
     acquisition_date = models.DateField(
         "取得日期", null=True, blank=True,
         help_text="拾獲或入館日期，與採集日期不同時請分別填寫",
+    )
+    source_institution = models.CharField(
+        "來源單位", max_length=200, null=True, blank=True,
+        help_text=(
+            "標本的來源機關或單位，例如移交的主管機關、捐贈單位、"
+            "野生動物收容或救傷單位等。"
+        ),
+    )
+    permit_number = models.CharField(
+        "主管機關許可文號", max_length=200, null=True, blank=True,
+        help_text=(
+            "採集、持有或移交所依據的主管機關許可或公文文號"
+            "（如野生動物保育相關許可）。可留空。"
+        ),
     )
     preparer = models.CharField("標本製作者", max_length=100, blank=True)
     preparation_date = models.DateField("製作完成日期", null=True, blank=True)
