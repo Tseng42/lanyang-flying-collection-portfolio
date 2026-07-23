@@ -4,6 +4,8 @@
 以及 Darwin Core 匯出「含未公開資料」的權限控管。
 """
 
+import datetime
+
 from django.contrib.admin.sites import site
 from django.contrib.auth.models import Group, Permission, User
 from django.test import RequestFactory, TestCase
@@ -11,7 +13,7 @@ from django.urls import reverse
 
 from .admin import SpecimenAdmin
 from .models import (
-    Observation, PublicationStatus, Species, Specimen,
+    CollectionEvent, Observation, PublicationStatus, Species, Specimen,
 )
 
 
@@ -311,3 +313,132 @@ class FullExportViewTests(TestCase):
         self.assertEqual(counts["物種"], 1)
         self.assertEqual(counts["標本"], 1)
         self.assertIn("公開狀態", [c.value for c in wb["標本"][1]])
+
+
+class LabelCsvExportTests(TestCase):
+    """標籤列印用 CSV 匯出。"""
+
+    def _admin(self):
+        return SpecimenAdmin(Specimen, site)
+
+    def _make_specimen(self, **overrides):
+        species = Species.objects.create(
+            common_name=overrides.pop("common_name", "東方環頸鴴"),
+            scientific_name=overrides.pop("scientific_name", "Charadrius alexandrinus"),
+            taxon_group=Species.TaxonGroup.BIRD,
+            conservation_status=Species.ConservationStatus.GENERAL,
+        )
+        event = CollectionEvent.objects.create(
+            collection_date=overrides.pop("collection_date", datetime.date(2026, 3, 15)),
+            collection_location=overrides.pop("location", "宜蘭縣五結鄉蘭陽溪口北岸"),
+            collector=overrides.pop("collector", "王小明"),
+        )
+        return Specimen.objects.create(
+            catalog_number=overrides.pop("catalog_number", "LYM-AV-2026-0001"),
+            taxon_group=Specimen.TaxonGroup.BIRD,
+            species=species,
+            specimen_type=Specimen.SpecimenType.TAXIDERMY,
+            collection_event=event,
+            acquisition_date=overrides.pop("acquisition_date", datetime.date(2026, 4, 1)),
+            publication_status=overrides.pop(
+                "publication_status", PublicationStatus.DRAFT
+            ),
+        )
+
+    def test_qr_content_matches_spec_example(self):
+        s = self._make_specimen()
+        row = self._admin()._label_row(s)
+        expected_qr = (
+            "LYM-AV-2026-0001｜東方環頸鴴｜Charadrius alexandrinus｜"
+            "採集 2026-03-15｜典藏 2026-04-01｜宜蘭縣五結鄉蘭陽溪口北岸｜王小明"
+        )
+        print("\n[QR內容] " + row[7])   # 供人工確認格式
+        self.assertEqual(row[7], expected_qr)
+        # 前七欄為原始文字（日期無「採集／典藏」前綴）
+        self.assertEqual(row[:7], [
+            "LYM-AV-2026-0001", "東方環頸鴴", "Charadrius alexandrinus",
+            "2026-03-15", "2026-04-01", "宜蘭縣五結鄉蘭陽溪口北岸", "王小明",
+        ])
+
+    def test_empty_items_are_skipped_no_double_separator(self):
+        s = self._make_specimen(collector="", location="", common_name="")
+        qr = self._admin()._label_row(s)[7]
+        self.assertNotIn("｜｜", qr)          # 無連續分隔符
+        self.assertFalse(qr.endswith("｜"))   # 無結尾分隔符
+        self.assertNotIn("東方環頸鴴", qr)
+        self.assertIn("Charadrius alexandrinus", qr)
+
+    def test_qr_has_no_newline(self):
+        s = self._make_specimen(location="宜蘭縣\n五結鄉")
+        qr = self._admin()._label_row(s)[7]
+        self.assertNotIn("\n", qr)
+        self.assertNotIn("\r", qr)
+        self.assertIn("宜蘭縣 五結鄉", qr)
+
+    def test_export_ignores_publication_status(self):
+        """草稿也要能匯出（不依 publication_status 過濾）。"""
+        self._make_specimen(publication_status=PublicationStatus.DRAFT)
+        user = User.objects.create_user("labeler", password="x", is_staff=True)
+        user.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="collection", codename="change_specimen"
+            ),
+            Permission.objects.get(
+                content_type__app_label="collection", codename="view_specimen"
+            ),
+        )
+        self.client.force_login(user)
+        resp = self.client.post(
+            reverse("admin:collection_specimen_changelist"),
+            {"action": "export_label_csv_utf8",
+             "_selected_action": ["LYM-AV-2026-0001"]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp["Content-Type"].startswith("text/csv"))
+        self.assertEqual(resp.content[:3], b"\xef\xbb\xbf")   # UTF-8 BOM
+        self.assertIn("東方環頸鴴", resp.content.decode("utf-8-sig"))
+
+    def test_big5_replaces_unencodable_without_error(self):
+        # 🦋 無法以 Big5 編碼 → 以 ? 取代，不得拋例外
+        s = self._make_specimen(collector="王小明🦋", catalog_number="LYM-AV-2026-0002")
+        resp = self._admin()._label_csv_response(
+            self._request_with_messages(), Specimen.objects.filter(pk=s.pk), big5=True
+        )
+        self.assertEqual(resp["Content-Type"], "text/csv; charset=big5")
+        # 內容可用 big5 解碼（未中斷），且含取代字元 ?
+        decoded = resp.content.decode("big5")
+        self.assertIn("王小明", decoded)
+        self.assertIn("?", decoded)
+
+    def _request_with_messages(self):
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from django.contrib.sessions.backends.db import SessionStore
+        req = RequestFactory().post("/admin/collection/specimen/")
+        req.session = SessionStore()
+        req._messages = FallbackStorage(req)
+        return req
+
+    def test_actions_require_change_permission(self):
+        view_only = User.objects.create_user("viewer", password="x", is_staff=True)
+        view_only.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="collection", codename="view_specimen"
+            )
+        )
+        changer = User.objects.create_user("changer", password="x", is_staff=True)
+        changer.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="collection", codename="change_specimen"
+            )
+        )
+        admin = self._admin()
+
+        def actions_for(user):
+            req = RequestFactory().get("/admin/collection/specimen/")
+            req.user = User.objects.get(pk=user.pk)
+            return admin.get_actions(req)
+
+        self.assertNotIn("export_label_csv_utf8", actions_for(view_only))
+        self.assertNotIn("export_label_csv_big5", actions_for(view_only))
+        self.assertIn("export_label_csv_utf8", actions_for(changer))
+        self.assertIn("export_label_csv_big5", actions_for(changer))

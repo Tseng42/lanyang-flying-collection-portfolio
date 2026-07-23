@@ -10,6 +10,7 @@ import io
 import json
 import re
 import zipfile
+from urllib.parse import quote
 
 from django import forms
 from django.contrib import admin, messages
@@ -662,6 +663,7 @@ class SpecimenAdmin(PublicationAdminMixin, ModelAdmin):
     actions = [
         "make_published", "make_review", "make_draft",
         "export_darwin_core_csv", "export_darwin_core_csv_with_unpublished",
+        "export_label_csv_utf8", "export_label_csv_big5",
     ]
     # 清單頁一次帶出物種，避免逐列查詢（N+1）
     list_select_related = ("species",)
@@ -886,6 +888,116 @@ class SpecimenAdmin(PublicationAdminMixin, ModelAdmin):
         if not self.has_publish_permission(request):
             raise PermissionDenied
         return self._darwin_core_response(request, queryset)
+
+    # ── 標籤列印用 CSV（供 GoDEX EZ-6300 Plus ＋ GoLabel 使用）───────────────
+    # GoLabel 負責版面與 QR 圖形，這裡只輸出 CSV。不受 publication_status 影響：
+    # 貼標籤是整理實體標本的作業，草稿／待審／公開一律可匯出。
+    LABEL_CSV_HEADER = [
+        "典藏編號", "中文名", "學名",
+        "採集日期", "典藏日期", "採集地點", "採集者", "QR內容",
+    ]
+
+    @staticmethod
+    def _label_clean(value):
+        """轉字串並移除換行（CSV／QR 欄位內含換行會讓 GoLabel 讀取出錯）。"""
+        if value is None:
+            return ""
+        return re.sub(r"[\r\n]+", " ", str(value)).strip()
+
+    @staticmethod
+    def _label_iso(value):
+        """日期→YYYY-MM-DD；空值→空字串。"""
+        return value.isoformat() if value else ""
+
+    def _label_row(self, specimen):
+        """組出單一標本的標籤欄位（七欄文字＋QR內容）。
+
+        採集資訊優先讀採集事件（collection_event），退回標本上保留的舊採集欄位；
+        典藏日期優先取得日期（acquisition_date），退回入藏日期（accession_date）。
+        """
+        event = specimen.collection_event
+        collection_date = (event.collection_date if event else None) or specimen.collection_date
+        location = (event.collection_location if event else "") or specimen.collection_location
+        collector = (event.collector if event else "") or specimen.collector
+        accession_date = specimen.acquisition_date or specimen.accession_date
+
+        catalog = self._label_clean(specimen.catalog_number)
+        common = self._label_clean(specimen.species.common_name if specimen.species_id else "")
+        scientific = self._label_clean(specimen.species.scientific_name if specimen.species_id else "")
+        collection_iso = self._label_iso(collection_date)
+        accession_iso = self._label_iso(accession_date)
+        location = self._label_clean(location)
+        collector = self._label_clean(collector)
+
+        # QR內容：非空項目才串入，空值整項略過（不留空欄、不留連續分隔符）。
+        # 兩個日期加「採集／典藏」短前綴以資區別（其餘欄位不加前綴，節省 QR 容量）。
+        qr_parts = []
+        if catalog:
+            qr_parts.append(catalog)
+        if common:
+            qr_parts.append(common)
+        if scientific:
+            qr_parts.append(scientific)
+        if collection_iso:
+            qr_parts.append(f"採集 {collection_iso}")
+        if accession_iso:
+            qr_parts.append(f"典藏 {accession_iso}")
+        if location:
+            qr_parts.append(location)
+        if collector:
+            qr_parts.append(collector)
+        qr_content = "｜".join(qr_parts)
+
+        return [
+            catalog, common, scientific,
+            collection_iso, accession_iso, location, collector, qr_content,
+        ]
+
+    def _label_csv_response(self, request, queryset, *, big5):
+        queryset = queryset.select_related("species", "collection_event")
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(self.LABEL_CSV_HEADER)
+        count = 0
+        for specimen in queryset:
+            writer.writerow(self._label_row(specimen))
+            count += 1
+        text = buffer.getvalue()
+
+        if big5:
+            # 罕用字無法以 Big5 編碼時以「?」取代，不拋例外中斷匯出
+            content = text.encode("big5", errors="replace")
+            content_type = "text/csv; charset=big5"
+            label = "Big5"
+        else:
+            # UTF-8 with BOM（utf-8-sig 自動加 BOM，供 Excel／GoLabel 判讀）
+            content = text.encode("utf-8-sig")
+            content_type = "text/csv; charset=utf-8"
+            label = "UTF-8 BOM"
+
+        stamp = timezone.localtime().strftime("%Y%m%d-%H%M")
+        filename = f"標籤列印_{stamp}.csv"
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = (
+            f"attachment; filename=labels_{stamp}.csv; "
+            f"filename*=UTF-8''{quote(filename)}"
+        )
+        self.message_user(
+            request,
+            f"已匯出 {count} 筆標籤列印 CSV（{label}）。",
+            level=messages.INFO,
+        )
+        return response
+
+    @admin.action(description="匯出標籤列印用 CSV（UTF-8）", permissions=["change"])
+    def export_label_csv_utf8(self, request, queryset):
+        """標籤列印 CSV（UTF-8 with BOM）；不受公開狀態影響，草稿也可匯出。"""
+        return self._label_csv_response(request, queryset, big5=False)
+
+    @admin.action(description="匯出標籤列印用 CSV（Big5）", permissions=["change"])
+    def export_label_csv_big5(self, request, queryset):
+        """標籤列印 CSV（Big5，罕用字以 ? 取代）；不受公開狀態影響，草稿也可匯出。"""
+        return self._label_csv_response(request, queryset, big5=True)
 
     def _darwin_core_response(self, request, queryset):
         """把 queryset 的標本組成 Darwin Core 欄位的 CSV（打包成 ZIP，附授權說明）。"""
