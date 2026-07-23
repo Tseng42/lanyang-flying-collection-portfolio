@@ -16,12 +16,14 @@ from django.contrib import admin, messages
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
+from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin, TabularInline
+from unfold.decorators import display
 from unfold.forms import (
     AdminPasswordChangeForm,
     UserChangeForm,
@@ -32,8 +34,94 @@ from unfold.widgets import INPUT_CLASSES
 
 from .models import (
     CATALOG_NUMBER_RE, CollectionEvent, Identification, Movement, Observation,
-    ObservationImage, Species, SpeciesImage, Specimen, SpecimenImage,
+    ObservationImage, PublicationStatus, Species, SpeciesImage, Specimen,
+    SpecimenImage,
 )
+
+
+# ── 公開狀態徽章配色（Unfold @display(label=...)：值 → 語意色）─────────────
+# 草稿=灰（預設）、待審=橙黃(warning)、公開=綠(success)。
+PUBLICATION_LABELS = {
+    PublicationStatus.DRAFT: "",             # 未匹配任何語意色 → 灰底
+    PublicationStatus.REVIEW: "warning",     # 橙黃
+    PublicationStatus.PUBLISHED: "success",  # 綠
+}
+
+
+class PublicationAdminMixin:
+    """三個模型（物種／標本／觀察紀錄）共用的「公開狀態」後台行為。
+
+    子類別須設定 publish_permission，例如 "collection.can_publish_specimen"。
+    提供：狀態徽章、依權限限制可選狀態、已公開者對無權限者唯讀、批次動作
+    （設為草稿／待審／公開，其中「設為公開」需公開權限）。
+    """
+
+    publish_permission = None
+
+    @display(
+        description="公開狀態",
+        ordering="publication_status",
+        label=PUBLICATION_LABELS,
+    )
+    def publication_badge(self, obj):
+        # 回傳 (值, 顯示文字)：Unfold 依「值」查配色、以「顯示文字」渲染中文
+        return obj.publication_status, obj.get_publication_status_display()
+
+    def has_publish_permission(self, request):
+        """目前使用者是否可將此模型的資料設為公開。"""
+        return bool(self.publish_permission) and request.user.has_perm(
+            self.publish_permission
+        )
+
+    def formfield_for_choice_field(self, db_field, request, **kwargs):
+        # 無公開權限者：公開狀態欄位僅顯示「草稿」「待審」，不出現「公開」選項
+        if db_field.name == "publication_status" and not self.has_publish_permission(
+            request
+        ):
+            kwargs["choices"] = [
+                (value, label)
+                for value, label in PublicationStatus.choices
+                if value != PublicationStatus.PUBLISHED
+            ]
+        return super().formfield_for_choice_field(db_field, request, **kwargs)
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        # 該筆原本已是公開狀態，且目前使用者無公開權限 → 不得改動此欄位
+        if (
+            obj is not None
+            and obj.publication_status == PublicationStatus.PUBLISHED
+            and not self.has_publish_permission(request)
+            and "publication_status" not in readonly
+        ):
+            readonly.append("publication_status")
+        return readonly
+
+    @admin.action(description="批次設為草稿")
+    def make_draft(self, request, queryset):
+        updated = queryset.update(publication_status=PublicationStatus.DRAFT)
+        self.message_user(
+            request, f"已將 {updated} 筆設為「草稿」。", level=messages.INFO,
+        )
+
+    @admin.action(description="批次設為待審")
+    def make_review(self, request, queryset):
+        updated = queryset.update(publication_status=PublicationStatus.REVIEW)
+        self.message_user(
+            request, f"已將 {updated} 筆設為「待審」。", level=messages.INFO,
+        )
+
+    # permissions=["publish"] → Django 會呼叫 has_publish_permission 決定是否
+    # 於下拉選單顯示此動作；無權限者根本看不到「批次設為公開」。
+    @admin.action(description="批次設為公開", permissions=["publish"])
+    def make_published(self, request, queryset):
+        # 後端二次驗證：即使前端動作被隱藏，仍嚴格把關（不可只靠 UI 隱藏）
+        if not self.has_publish_permission(request):
+            raise PermissionDenied
+        updated = queryset.update(publication_status=PublicationStatus.PUBLISHED)
+        self.message_user(
+            request, f"已將 {updated} 筆設為「公開」。", level=messages.INFO,
+        )
 
 
 # ── Darwin Core 匯出專用的「值」對照 ──────────────────────────────
@@ -429,13 +517,18 @@ class SpeciesAdminForm(forms.ModelForm):
 
 
 @admin.register(Species)
-class SpeciesAdmin(ModelAdmin):
+class SpeciesAdmin(PublicationAdminMixin, ModelAdmin):
     form = SpeciesAdminForm
+    publish_permission = "collection.can_publish_species"
     list_display = (
         "common_name", "scientific_name_italic", "taxon_group",
-        "conservation_status",
+        "conservation_status", "publication_badge",
     )
-    list_filter = ("taxon_group", "conservation_status", "is_auto_created")
+    list_filter = (
+        "publication_status", "taxon_group", "conservation_status",
+        "is_auto_created",
+    )
+    actions = ["make_published", "make_review", "make_draft"]
     search_fields = ("common_name", "scientific_name")
     inlines = (SpeciesImageInline, SpecimenInline, ObservationInline)
 
@@ -464,6 +557,13 @@ class SpeciesAdmin(ModelAdmin):
         )
 
     fieldsets = (
+        ("公開設定", {
+            "fields": ("publication_status",),
+            "description": (
+                "僅「公開」狀態的物種會出現在對外檢索、物種頁與公開統計；"
+                "草稿與待審僅供館內作業。設為公開需具備公開權限。"
+            ),
+        }),
         ("基本分類", {
             "fields": (
                 "common_name", "scientific_name", "taicol_taxon_id",
@@ -555,10 +655,14 @@ class IdentificationInline(TabularInline):
 
 
 @admin.register(Specimen)
-class SpecimenAdmin(ModelAdmin):
+class SpecimenAdmin(PublicationAdminMixin, ModelAdmin):
     form = SpecimenAdminForm
+    publish_permission = "collection.can_publish_specimen"
     inlines = (IdentificationInline, MovementInline, SpecimenImageInline)
-    actions = ["export_darwin_core_csv"]
+    actions = [
+        "make_published", "make_review", "make_draft",
+        "export_darwin_core_csv", "export_darwin_core_csv_with_unpublished",
+    ]
     # 清單頁一次帶出物種，避免逐列查詢（N+1）
     list_select_related = ("species",)
     # 「以此為範本另存」：同物種/同地點的標本可沿用上一筆，主鍵留空會自動產生新編號
@@ -597,9 +701,10 @@ class SpecimenAdmin(ModelAdmin):
         })
     list_display = (
         "catalog_number", "species_or_group", "specimen_type", "status",
-        "identification_status", "hazard_flag",
+        "identification_status", "publication_badge", "hazard_flag",
     )
     list_filter = (
+        "publication_status",
         "taxon_group", "identification_status", "status",
         "preparation_status", "cause_of_death",
         AccessionYearFilter, HazardFilter, CompletenessFilter,
@@ -634,6 +739,13 @@ class SpecimenAdmin(ModelAdmin):
                 "比對到既有物種即沿用，找不到會自動建立（保育等級「待查證」）；"
                 "也可清空輸入框、改用下方「選取既有物種」下拉／＋新增彈窗。"
                 "尚未鑑定可留空。典藏編號留空會自動產生。"
+            ),
+        }),
+        ("公開設定", {
+            "fields": ("publication_status",),
+            "description": (
+                "僅「公開」狀態的標本會出現在對外頁面與公開統計；"
+                "草稿與待審僅供館內作業。設為公開需具備公開權限。"
             ),
         }),
         ("標本製作與來源", {
@@ -680,9 +792,13 @@ class SpecimenAdmin(ModelAdmin):
     )
 
     def get_readonly_fields(self, request, obj=None):
+        # 先取 mixin 的判斷（含「已公開且無權限 → publication_status 唯讀」）
+        readonly = list(super().get_readonly_fields(request, obj))
         # occurrence_uuid 一律唯讀（自動產生、不得變更或清空）
-        readonly = ["basis_of_record", "occurrence_uuid"]
-        if obj is not None:
+        for field in ("basis_of_record", "occurrence_uuid"):
+            if field not in readonly:
+                readonly.append(field)
+        if obj is not None and "catalog_number" not in readonly:
             # 編輯既有標本時鎖定典藏編號（主鍵），避免改動造成關聯錯亂
             readonly.append("catalog_number")
         return readonly
@@ -750,9 +866,29 @@ class SpecimenAdmin(ModelAdmin):
                 level=messages.INFO,
             )
 
-    @admin.action(description="匯出為 Darwin Core CSV")
+    @admin.action(description="匯出為 Darwin Core CSV（僅公開資料）")
     def export_darwin_core_csv(self, request, queryset):
-        """把勾選的標本匯出成 Darwin Core 欄位的 CSV。"""
+        """匯出勾選標本中「公開」者為 Darwin Core CSV（預設不含未公開資料）。"""
+        return self._darwin_core_response(
+            request,
+            queryset.filter(publication_status=PublicationStatus.PUBLISHED),
+        )
+
+    # 「包含未公開資料」的匯出：以 permissions=["publish"] 控管——無 can_publish_specimen
+    # 權限者，此動作根本不出現在下拉選單（等同「勾選框僅對有權限者顯示」）。
+    @admin.action(
+        description="匯出為 Darwin Core CSV（含未公開資料）",
+        permissions=["publish"],
+    )
+    def export_darwin_core_csv_with_unpublished(self, request, queryset):
+        """匯出勾選的全部標本（含草稿／待審）。需具備 can_publish_specimen 權限。"""
+        # 後端二次驗證，不可只靠前端隱藏
+        if not self.has_publish_permission(request):
+            raise PermissionDenied
+        return self._darwin_core_response(request, queryset)
+
+    def _darwin_core_response(self, request, queryset):
+        """把 queryset 的標本組成 Darwin Core 欄位的 CSV（打包成 ZIP，附授權說明）。"""
         queryset = queryset.select_related("species", "collection_event")
 
         def dwc_date(value):
@@ -926,12 +1062,15 @@ class SpecimenAdmin(ModelAdmin):
 
 
 @admin.register(Observation)
-class ObservationAdmin(ModelAdmin):
+class ObservationAdmin(PublicationAdminMixin, ModelAdmin):
+    publish_permission = "collection.can_publish_observation"
     list_display = (
         "record_number", "species", "data_source", "observer",
         "observation_date", "observation_location", "count",
+        "publication_badge",
     )
-    list_filter = ("data_source", "species__taxon_group")
+    list_filter = ("publication_status", "data_source", "species__taxon_group")
+    actions = ["make_published", "make_review", "make_draft"]
     search_fields = (
         "record_number", "species__scientific_name",
         "species__common_name", "observer", "observation_location",
@@ -945,6 +1084,13 @@ class ObservationAdmin(ModelAdmin):
     list_select_related = ("species",)
 
     fieldsets = (
+        ("公開設定", {
+            "fields": ("publication_status",),
+            "description": (
+                "僅「公開」狀態的觀察紀錄會出現在對外頁面與公開統計；"
+                "設為公開需具備公開權限。"
+            ),
+        }),
         ("基本資訊", {
             "fields": (
                 "record_number", "species", "data_source",

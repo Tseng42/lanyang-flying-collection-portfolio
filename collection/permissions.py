@@ -38,6 +38,34 @@ GROUP_EXTRA_PERMS = {
     "管理員": ["can_backup_database"],
 }
 
+# 三個「設為公開」自訂權限（由各模型 Meta.permissions 自動建立，分屬各自的
+# content type）。因 sync_groups 以 .set() 覆寫群組權限，這裡必須一併納入，
+# 否則 post_migrate 會把 0024 資料遷移指派的公開權限重新清掉。
+PUBLISH_PERMISSIONS = [
+    "can_publish_species",
+    "can_publish_specimen",
+    "can_publish_observation",
+]
+
+# 群組 → 「設為公開」權限。權限分級為 Superuser／典藏主管／登錄員／唯讀研究員
+# 四層，公開權只屬「典藏主管」。「管理員」不在此四層設計內（用途待釐清），
+# 故不指派公開權；其餘角色亦不得設為公開。
+GROUP_PUBLISH_PERMS = {
+    "典藏主管": PUBLISH_PERMISSIONS,
+}
+
+
+def _publish_permissions(codenames):
+    """依 codename 取回「設為公開」權限（跨三個模型的 content type）。"""
+    if not codenames:
+        return []
+    return list(
+        Permission.objects.filter(
+            content_type__app_label="collection",
+            codename__in=codenames,
+        )
+    )
+
 
 def _model_permissions(actions):
     codenames = [
@@ -82,5 +110,7 @@ def sync_groups(**kwargs):
             for codename in GROUP_EXTRA_PERMS.get(name, [])
             if codename in custom
         ]
+        # 「設為公開」權限（分屬三個模型的 content type，非 custom 那批）
+        perms += _publish_permissions(GROUP_PUBLISH_PERMS.get(name, []))
         # 用 set() 覆寫，確保與設定一致（含日後調整時的校正）
         group.permissions.set(perms)

@@ -24,7 +24,9 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from .external import search_external_links, species_external_links
-from .models import ObservationImage, Species, SpeciesImage, Specimen
+from .models import (
+    ObservationImage, PublicationStatus, Species, SpeciesImage, Specimen,
+)
 from .stats import public_stats, staff_extra_stats
 
 
@@ -167,8 +169,9 @@ def _filtered_species(request):
     group = request.GET.get("taxon_group", "")
     status = request.GET.get("conservation_status", "")
 
-    species = Species.objects.all()
-    # 簡易版排除自動建立（待查證）物種；研究檢視顯示全部
+    # 對外頁面一律只撈「公開」物種（簡易版與研究檢視皆過濾）
+    species = Species.objects.published()
+    # 簡易版另排除自動建立（待查證）物種；研究檢視顯示全部（公開）物種
     if not _is_research(request):
         species = species.exclude(is_auto_created=True)
     if q:
@@ -212,8 +215,8 @@ def public_species_list(request):
         "taxon_groups": Species.TaxonGroup.choices,
         "conservation_choices": Species.ConservationStatus.choices,
         "total": total,
-        # 系統完全沒有任何物種資料（空系統）→ 顯示優雅空狀態
-        "db_empty": not Species.objects.exists(),
+        # 對外沒有任何公開物種（空系統或全為草稿）→ 顯示優雅空狀態
+        "db_empty": not Species.objects.published().exists(),
         # 有查詢條件卻查無結果時，引導到外部權威資源查詢
         "no_result_links": search_external_links(q) if not total else None,
         # 檢視模式：研究檢視顯示全部並標示待查證；簡易版於頁尾顯示說明
@@ -262,7 +265,8 @@ def public_species_detail(request, pk):
     隱私在後端就過濾：不輸出採集者／來源等姓名，地點一律只到縣市層級，
     精確經緯度完全不輸出（前端無從取得）。
     """
-    species = get_object_or_404(Species, pk=pk)
+    # 對外頁面只開放「公開」物種；未公開（草稿／待審）一律 404，不外洩其存在
+    species = get_object_or_404(Species.objects.published(), pk=pk)
     is_research = _is_research(request)
 
     # 簡易版直接開啟被排除（自動建立）的物種 → 302 導向研究檢視，並提示已切換。
@@ -272,10 +276,12 @@ def public_species_detail(request, pk):
 
     protected = species.conservation_status != Species.ConservationStatus.GENERAL
 
-    # 標本：未鑑定標本不再排除，簡易版與研究檢視都顯示（僅以「鑑定中」標示）。
+    # 標本：對外頁面只顯示「公開」標本；未鑑定標本不再排除（僅以「鑑定中」標示）。
     # select_related("collection_event")：採集資訊改讀事件，避免逐筆查詢（N+1）。
-    specimen_qs = species.specimens.select_related("collection_event").prefetch_related(
-        "identifications__identified_as"
+    specimen_qs = (
+        species.specimens.published()
+        .select_related("collection_event")
+        .prefetch_related("identifications__identified_as")
     )
 
     # 種名為空時的最低分類階層 fallback（種→屬→科→目→類群），避免留下空白
@@ -328,11 +334,13 @@ def public_species_detail(request, pk):
         for img in species.images.filter(is_public=True)
     ]
     # 觀察影像：保育類物種一律不顯示（防盜獵），非保育類才納入公開影像。
+    # 另外只取「公開」觀察紀錄的影像，未公開觀察紀錄不外洩。
     if not protected:
         public_gallery += [
             _gallery_item(img, species)
             for img in ObservationImage.objects.filter(
                 observation__species=species, is_public=True,
+                observation__publication_status=PublicationStatus.PUBLISHED,
             )
         ]
 
@@ -349,6 +357,7 @@ def public_species_detail(request, pk):
                 _gallery_item(img, species)
                 for img in ObservationImage.objects.filter(
                     observation__species=species, is_public=False,
+                    observation__publication_status=PublicationStatus.PUBLISHED,
                 )
             ]
 

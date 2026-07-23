@@ -15,6 +15,25 @@ from django.utils import timezone
 CATALOG_NUMBER_RE = re.compile(r"^LYM-[A-Z]{2}-\d{4}-\d{4}$")
 
 
+class PublicationStatus(models.TextChoices):
+    """對外公開狀態：控制一筆資料是否出現在對外頁面／統計／匯出。
+
+    Species／Specimen／Observation 三個模型共用此列舉，語意一致：
+    只有「公開」(published) 的資料才會被對外頁面撈出。
+    """
+
+    DRAFT = "draft", "草稿"
+    REVIEW = "review", "待審"
+    PUBLISHED = "published", "公開"
+
+
+class PublicationQuerySet(models.QuerySet):
+    """提供 .published()，讓對外頁面共用同一段過濾條件，避免各處重複、日後漏改。"""
+
+    def published(self):
+        return self.filter(publication_status=PublicationStatus.PUBLISHED)
+
+
 class Species(models.Model):
     """物種表 — 系統的分類骨幹，可對接臺灣物種名錄 TaiCOL。
 
@@ -107,6 +126,17 @@ class Species(models.Model):
         "由標本建檔自動產生", default=False,
         help_text="此筆物種資料由標本建檔時自動產生，請盡快補齊保育等級與分類資訊。",
     )
+    publication_status = models.CharField(
+        "公開狀態",
+        max_length=20,
+        choices=PublicationStatus.choices,
+        default=PublicationStatus.DRAFT,
+        db_index=True,
+        help_text="僅「公開」狀態的資料會顯示於對外檢索、物種頁與公開統計。",
+    )
+
+    # 預設管理器改為附帶 .published()；對外頁面統一以 Species.objects.published() 過濾。
+    objects = PublicationQuerySet.as_manager()
 
     class Meta:
         verbose_name = "物種"
@@ -118,6 +148,14 @@ class Species(models.Model):
             # 支援「保育等級」篩選
             models.Index(fields=["conservation_status"]),
         ]
+        permissions = [
+            ("can_publish_species", "可將物種設為公開"),
+        ]
+
+    @property
+    def is_published(self):
+        """是否為對外公開狀態（供模板判斷是否產生超連結，避免導向未公開頁）。"""
+        return self.publication_status == PublicationStatus.PUBLISHED
 
     def __str__(self):
         if self.common_name:
@@ -488,6 +526,17 @@ class Specimen(models.Model):
     created_at = models.DateTimeField(
         "建立時間", default=timezone.now, editable=False,
     )
+    publication_status = models.CharField(
+        "公開狀態",
+        max_length=20,
+        choices=PublicationStatus.choices,
+        default=PublicationStatus.DRAFT,
+        db_index=True,
+        help_text="僅「公開」狀態的標本會顯示於對外頁面與公開統計。",
+    )
+
+    # 預設管理器改為附帶 .published()；對外頁面統一以 Specimen.objects.published() 過濾。
+    objects = PublicationQuerySet.as_manager()
 
     class Meta:
         verbose_name = "標本"
@@ -499,6 +548,14 @@ class Specimen(models.Model):
             models.Index(fields=["preparation_status"]),
             models.Index(fields=["cause_of_death"]),
         ]
+        permissions = [
+            ("can_publish_specimen", "可將標本設為公開"),
+        ]
+
+    @property
+    def is_published(self):
+        """是否為對外公開狀態。"""
+        return self.publication_status == PublicationStatus.PUBLISHED
 
     def hazard_labels(self):
         """把已勾選的危害代碼轉成人類可讀的標籤清單。"""
@@ -582,6 +639,17 @@ class Observation(models.Model):
     source_reference = models.CharField(
         "來源網址或原始ID", max_length=500, blank=True,
     )
+    publication_status = models.CharField(
+        "公開狀態",
+        max_length=20,
+        choices=PublicationStatus.choices,
+        default=PublicationStatus.DRAFT,
+        db_index=True,
+        help_text="僅「公開」狀態的觀察紀錄會顯示於對外頁面與公開統計。",
+    )
+
+    # 預設管理器改為附帶 .published()；對外頁面統一以 Observation.objects.published() 過濾。
+    objects = PublicationQuerySet.as_manager()
 
     class Meta:
         verbose_name = "觀察紀錄"
@@ -592,6 +660,14 @@ class Observation(models.Model):
             models.Index(fields=["data_source"]),
             models.Index(fields=["observation_date"]),
         ]
+        permissions = [
+            ("can_publish_observation", "可將觀察紀錄設為公開"),
+        ]
+
+    @property
+    def is_published(self):
+        """是否為對外公開狀態。"""
+        return self.publication_status == PublicationStatus.PUBLISHED
 
     @property
     def basis_of_record(self):

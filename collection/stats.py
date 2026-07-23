@@ -25,8 +25,12 @@ def public_stats(simple=False):
     """
     species_qs = Species.objects.all()
     specimen_qs = Specimen.objects.all()
+    observation_qs = Observation.objects.all()
     if simple:
-        species_qs = species_qs.exclude(is_auto_created=True)
+        # 公開／簡易版：三者一律只計「公開」資料；物種另排除自動建立（待查證）者
+        species_qs = species_qs.published().exclude(is_auto_created=True)
+        specimen_qs = specimen_qs.published()
+        observation_qs = observation_qs.published()
 
     species_by_group = _count_map(species_qs, "taxon_group")
     # 標本改用自身的 taxon_group 統計，使「未鑑定標本」也計入所屬類群（不再漏算）
@@ -50,7 +54,7 @@ def public_stats(simple=False):
     return {
         "species_total": species_qs.count(),
         "specimen_total": specimen_qs.count(),
-        "observation_total": Observation.objects.count(),
+        "observation_total": observation_qs.count(),
         "groups": groups,
         "conservation": conservation,
     }
