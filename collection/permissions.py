@@ -6,14 +6,18 @@
 
 from django.contrib.auth.models import Group, Permission
 
-# 本系統納入權限控管的六個模型（皆屬 collection app）
+# 本系統納入權限控管的模型（皆屬 collection app）。
+# 影像子表 speciesimage／observationimage 一併納入，權限比照 specimenimage，
+# 讓典藏主管／登錄員能新增編修物種影像與觀察影像（見 GROUP_ACTIONS）。
 MANAGED_MODELS = [
-    "species",        # 物種
-    "specimen",       # 標本
-    "observation",    # 觀察紀錄
+    "species",         # 物種
+    "specimen",        # 標本
+    "observation",     # 觀察紀錄
     "identification",  # 鑑定歷程
-    "movement",       # 異動紀錄
-    "specimenimage",  # 標本影像
+    "movement",        # 異動紀錄
+    "specimenimage",   # 標本影像
+    "speciesimage",    # 物種影像
+    "observationimage",  # 觀察紀錄影像
 ]
 
 # 自訂「能力」權限（與單一模型無關，掛在 Specimen 的 content type 底下）

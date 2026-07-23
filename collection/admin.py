@@ -216,26 +216,6 @@ def _county_of(text):
     return m.group(0) if m else ""
 
 
-class AccessionYearFilter(admin.SimpleListFilter):
-    """依入藏年份篩選標本。"""
-
-    title = "入藏年份"
-    parameter_name = "accession_year"
-
-    def lookups(self, request, model_admin):
-        years = (
-            Specimen.objects
-            .exclude(accession_date__isnull=True)
-            .dates("accession_date", "year", order="DESC")
-        )
-        return [(d.year, f"{d.year} 年") for d in years]
-
-    def queryset(self, request, queryset):
-        if self.value():
-            return queryset.filter(accession_date__year=self.value())
-        return queryset
-
-
 class HazardFilter(admin.SimpleListFilter):
     """依危害標記篩選標本（SQLite 的 JSONField 不支援 contains，改以 Python 比對）。"""
 
@@ -587,8 +567,8 @@ class SpeciesAdmin(PublicationAdminMixin, ModelAdmin):
         }),
         ("基本分類", {
             "fields": (
-                "common_name", "scientific_name", "taicol_taxon_id",
-                "taxon_group", "order", "family", "genus",
+                "common_name", "scientific_name", "scientific_name_authorship",
+                "taicol_taxon_id", "taxon_group", "order", "family", "genus",
             ),
             "description": "必填欄位：<b>學名</b>、<b>分類群</b>（表單中以粗體標示）。",
         }),
@@ -726,11 +706,13 @@ class SpecimenAdmin(PublicationAdminMixin, ModelAdmin):
         "catalog_number", "species_or_group", "specimen_type", "status",
         "identification_status", "publication_badge", "hazard_flag",
     )
+    # 「入藏年份」filter 已移除：accession_date 已停用（預設為建檔當天），
+    # 篩選無意義；acquisition_date 填寫率過低（實測 0%），亦不適合作為篩選依據。
     list_filter = (
         "publication_status",
         "taxon_group", "identification_status", "status",
         "preparation_status", "cause_of_death",
-        AccessionYearFilter, HazardFilter, CompletenessFilter,
+        HazardFilter, CompletenessFilter,
     )
 
     @admin.display(description="物種／類群", ordering="species__scientific_name")
@@ -745,7 +727,7 @@ class SpecimenAdmin(PublicationAdminMixin, ModelAdmin):
         # 採集者／地點改由採集事件搜尋（舊欄位已撤出表單）
         "collection_event__collector", "collection_event__collection_location",
     )
-    date_hierarchy = "accession_date"
+    # date_hierarchy 已移除：原本用 accession_date（已停用、等同建檔日期），無篩選意義。
     # 採集事件下拉搜尋 + 右側「＋新增採集事件」彈窗
     autocomplete_fields = ("collection_event",)
 

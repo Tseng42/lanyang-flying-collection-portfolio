@@ -44,7 +44,8 @@ class Species(models.Model):
     """
 
     class TaxonGroup(models.TextChoices):
-        BIRD = "bird", "鳥"
+        # label 與 Specimen.TaxonGroup 統一為「鳥類」（value 相同，不影響既有資料）
+        BIRD = "bird", "鳥類"
         INSECT = "insect", "昆蟲"
         BAT = "bat", "蝙蝠"
         FLYING_SQUIRREL = "flying_squirrel", "飛鼠"
