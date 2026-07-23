@@ -14,6 +14,12 @@ urlpatterns = [
     path("go-home/logout/", views.go_home_logout, name="go_home_logout"),
     path("backup/", views.backup_database, name="backup_database"),
     path("restore/", views.restore_database, name="restore_database"),
+    path("full-export/", views.full_export_page, name="full_export"),
+    path(
+        "full-export/download.xlsx",
+        views.full_export_download,
+        name="full_export_download",
+    ),
     path("species/", views.public_species_list, name="public_species_list"),
     path(
         "species/export.csv",

@@ -12,6 +12,7 @@ import os
 import re
 import tempfile
 from datetime import datetime
+from urllib.parse import quote
 
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required, permission_required
@@ -20,6 +21,7 @@ from django.db import transaction
 from django.db.models import Count, Prefetch, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -395,6 +397,45 @@ def backup_database(request):
     response = HttpResponse(buffer.getvalue(), content_type="application/json")
     response["Content-Disposition"] = (
         f'attachment; filename="lymuseum-backup-{stamp}.json"'
+    )
+    return response
+
+
+# ---------------------------------------------------------------------------
+# 後台「全欄位匯出」：把全部典藏資料匯成單一多工作表 .xlsx（內部完整備份）。
+#
+# 與 Darwin Core 匯出（給 GBIF／TBIA 的標準化子集）互相獨立、並存。
+# 權限：superuser 或具 collection.can_export_full_data（→ 典藏主管）。
+# 後端強制檢查（非僅前端隱藏側邊欄連結）：無權限者 raise 403。
+# ---------------------------------------------------------------------------
+
+@login_required(login_url="/admin/login/")
+@permission_required("collection.can_export_full_data", raise_exception=True)
+def full_export_page(request):
+    """全欄位匯出的入口頁：說明 + 一個下載按鈕。"""
+    return render(request, "collection/full_export.html")
+
+
+@login_required(login_url="/admin/login/")
+@permission_required("collection.can_export_full_data", raise_exception=True)
+def full_export_download(request):
+    """產生並回傳整份 .xlsx（全部欄位、全部資料，不依公開狀態過濾）。"""
+    from .full_export import build_full_export
+
+    data = build_full_export()
+    stamp = timezone.localtime().strftime("%Y%m%d-%H%M")
+    filename = f"蘭陽博物館典藏資料_全欄位匯出_{stamp}.xlsx"
+    response = HttpResponse(
+        data,
+        content_type=(
+            "application/vnd.openxmlformats-officedocument"
+            ".spreadsheetml.sheet"
+        ),
+    )
+    # 中文檔名以 RFC 5987 filename* 提供；另附 ASCII 後備檔名以相容舊瀏覽器
+    response["Content-Disposition"] = (
+        f"attachment; filename=lymuseum_full_export_{stamp}.xlsx; "
+        f"filename*=UTF-8''{quote(filename)}"
     )
     return response
 

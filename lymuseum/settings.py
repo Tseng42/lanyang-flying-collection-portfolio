@@ -368,6 +368,15 @@ UNFOLD = {
                             "collection.can_restore_database"
                         ),
                     },
+                    {
+                        "title": "全欄位匯出",
+                        "icon": "table_view",
+                        "link": reverse_lazy("full_export"),
+                        # 僅有匯出權限者可見（後端 view 仍會強制檢查）
+                        "permission": lambda request: request.user.has_perm(
+                            "collection.can_export_full_data"
+                        ),
+                    },
                 ],
             },
             {

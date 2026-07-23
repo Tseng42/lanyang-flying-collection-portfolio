@@ -54,6 +54,13 @@ GROUP_PUBLISH_PERMS = {
     "典藏主管": PUBLISH_PERMISSIONS,
 }
 
+# 群組 → 「全欄位匯出」權限（Specimen.Meta.permissions 的 can_export_full_data）。
+# 與公開權互相獨立；只指派給「典藏主管」。同樣必須在此登記，否則 sync_groups
+# 以 .set() 覆寫時會清掉 0027 資料遷移的指派。
+GROUP_EXPORT_PERMS = {
+    "典藏主管": ["can_export_full_data"],
+}
+
 
 def _publish_permissions(codenames):
     """依 codename 取回「設為公開」權限（跨三個模型的 content type）。"""
@@ -112,5 +119,7 @@ def sync_groups(**kwargs):
         ]
         # 「設為公開」權限（分屬三個模型的 content type，非 custom 那批）
         perms += _publish_permissions(GROUP_PUBLISH_PERMS.get(name, []))
+        # 「全欄位匯出」權限（掛在 Specimen content type，依 codename 取回）
+        perms += _publish_permissions(GROUP_EXPORT_PERMS.get(name, []))
         # 用 set() 覆寫，確保與設定一致（含日後調整時的校正）
         group.permissions.set(perms)

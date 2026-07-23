@@ -228,3 +228,86 @@ class ReadonlyResearcherAdminTests(TestCase):
         self.assertEqual(
             self.specimen.publication_status, PublicationStatus.DRAFT
         )
+
+
+class FullExportViewTests(TestCase):
+    """後台全欄位匯出：權限控管與檔案產出。"""
+
+    XLSX_CT = (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+    @classmethod
+    def setUpTestData(cls):
+        # 有匯出權限者
+        cls.exporter = User.objects.create_user(
+            "exporter", password="x", is_staff=True,
+        )
+        cls.exporter.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="collection",
+                codename="can_export_full_data",
+            )
+        )
+        # 無匯出權限者（唯讀研究員群組）
+        cls.researcher = User.objects.create_user(
+            "researcher2", password="x", is_staff=True,
+        )
+        cls.researcher.groups.add(Group.objects.get(name="唯讀研究員"))
+        # 一些跨公開狀態的資料，確認匯出不做過濾
+        sp = Species.objects.create(
+            common_name="測試鳥", scientific_name="Testus avis",
+            taxon_group=Species.TaxonGroup.BIRD,
+            conservation_status=Species.ConservationStatus.GENERAL,
+            publication_status=PublicationStatus.DRAFT,
+        )
+        Specimen.objects.create(
+            taxon_group=Specimen.TaxonGroup.BIRD, species=sp,
+            specimen_type=Specimen.SpecimenType.TAXIDERMY,
+            publication_status=PublicationStatus.PUBLISHED,
+        )
+
+    def test_export_permission_independent_of_publish(self):
+        """can_export_full_data 與 can_publish_* 互相獨立。"""
+        u = User.objects.get(pk=self.exporter.pk)
+        self.assertTrue(u.has_perm("collection.can_export_full_data"))
+        self.assertFalse(u.has_perm("collection.can_publish_specimen"))
+
+    def test_page_forbidden_without_permission(self):
+        self.client.force_login(self.researcher)
+        self.assertEqual(
+            self.client.get(reverse("full_export")).status_code, 403
+        )
+
+    def test_download_forbidden_without_permission(self):
+        self.client.force_login(self.researcher)
+        self.assertEqual(
+            self.client.get(reverse("full_export_download")).status_code, 403
+        )
+
+    def test_page_ok_with_permission(self):
+        self.client.force_login(self.exporter)
+        self.assertEqual(self.client.get(reverse("full_export")).status_code, 200)
+
+    def test_download_returns_xlsx_with_permission(self):
+        self.client.force_login(self.exporter)
+        resp = self.client.get(reverse("full_export_download"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], self.XLSX_CT)
+        self.assertIn("filename*=UTF-8''", resp["Content-Disposition"])
+        # xlsx 是 zip 容器，開頭為 PK
+        self.assertEqual(resp.content[:2], b"PK")
+
+    def test_export_includes_all_publication_statuses(self):
+        """匯出全部資料，草稿與公開都要計入（不依 publication_status 過濾）。"""
+        import io
+
+        import openpyxl
+
+        from .full_export import build_full_export
+        counts = {}
+        wb = openpyxl.load_workbook(io.BytesIO(build_full_export(counts)))
+        # 1 個 draft 物種 + 1 個 published 標本 皆須計入
+        self.assertEqual(counts["物種"], 1)
+        self.assertEqual(counts["標本"], 1)
+        self.assertIn("公開狀態", [c.value for c in wb["標本"][1]])

@@ -550,6 +550,8 @@ class Specimen(models.Model):
         ]
         permissions = [
             ("can_publish_specimen", "可將標本設為公開"),
+            # 與 can_publish_* 互相獨立：可匯出全部典藏資料（後台全欄位 xlsx 備份）
+            ("can_export_full_data", "可匯出全部典藏資料"),
         ]
 
     @property

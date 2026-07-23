@@ -3,6 +3,7 @@ Django==5.2.16
 django-unfold==0.100.0        # 後台外觀
 whitenoise==6.12.0            # 正式環境提供靜態檔（CSS/JS）
 Pillow==12.2.0               # ImageField 影像處理
+openpyxl==3.1.5              # 後台「全欄位匯出」產生 .xlsx（write_only 串流）
 gunicorn==23.0.0             # 正式環境 WSGI 伺服器
 
 # ---- 資料庫（PostgreSQL）----

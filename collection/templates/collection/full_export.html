@@ -1,0 +1,24 @@
+{% extends "collection/base_public.html" %}
+
+{% block title %}全欄位匯出 · 蘭陽博物館 飛行生物典藏{% endblock %}
+
+{% block content %}
+  <a class="backlink" href="/admin/">← 回後台</a>
+  <h1>全欄位匯出</h1>
+  <p class="lead">
+    下載一份包含全部典藏資料的 Excel 檔（.xlsx，多工作表）。此為館內完整備份，
+    <strong>包含草稿、待審與公開的所有資料</strong>，並輸出每個模型的全部欄位。</p>
+
+  <div class="panel" style="max-width:620px;">
+    <p style="margin:0 0 16px; font-size:14px; color:var(--muted); line-height:1.9;">
+      工作表：物種、標本、觀察紀錄、標本照片、物種照片、觀察照片、鑑定歷程、異動紀錄。<br>
+      外鍵欄位會同時輸出「ID」與「可讀識別」（例如學名、典藏編號），方便在不同工作表之間對照。<br>
+      日期時間為台北時區（YYYY-MM-DD HH:MM）。
+    </p>
+    <a class="btn navy" href="{% url 'full_export_download' %}"
+       style="display:inline-block;">⬇ 下載全欄位匯出（.xlsx）</a>
+    <p class="muted" style="font-size:12px; margin:16px 0 0;">
+      ⚠️ 檔案含未公開資料，僅供館內作業使用，請勿對外散布。
+      此功能與對外的 Darwin Core 匯出（GBIF／TBIA 標準化子集）為兩個獨立功能。</p>
+  </div>
+{% endblock %}
