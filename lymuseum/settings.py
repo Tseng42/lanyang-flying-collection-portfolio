@@ -226,35 +226,65 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 # Logging
-# 正式環境（DEBUG=False）Django 預設不會把未捕捉例外的 Traceback 印到 stdout，
-# 導致 Render Logs 只看得到 HTTP 存取紀錄。以下明確設定 console handler 輸出到
-# sys.stdout，讓 500 錯誤的完整 Traceback 出現在 Render Logs。
-# 此設定不受 DEBUG 影響，DEBUG=False 時同樣生效。
+# 正式環境（DEBUG=False）時，Django 預設的 console handler 帶有 require_debug_true
+# 過濾器，未捕捉例外的 Traceback 不會印到 stdout，導致 Render Logs 只看得到 HTTP
+# 存取紀錄。以下自訂 console handler 直接輸出到 sys.stdout、且「不加任何 require_debug
+# 過濾器」，讓 500 錯誤的完整 Traceback 出現在 Render Logs。此設定不受 DEBUG 影響，
+# DEBUG=False 時同樣生效——且絕不需要、也不應該把 DEBUG 打開。
+#
+# 安全性：這裡只輸出例外堆疊與請求「路徑」。Django 的 django.request 錯誤紀錄本身
+# 不含 request.POST／body／cookies／session，我們也未加入任何會傾印請求內容或環境
+# 變數的 filter／formatter，因此不會把帳密等敏感資訊寫進 log。
+#
+# 詳細程度由環境變數 DJANGO_LOG_LEVEL 控制（預設 INFO），日後不改程式碼即可調整。
+DJANGO_LOG_LEVEL = os.environ.get('DJANGO_LOG_LEVEL', 'INFO')
+
 LOGGING = {
     'version': 1,
     # 保留 Django 內建 logger，避免關掉既有紀錄
     'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            # 時間、等級、logger 名稱、訊息
+            'format': '[{asctime}] {levelname} {name}: {message}',
+            'style': '{',
+        },
+    },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
             'stream': sys.stdout,
+            'formatter': 'verbose',
+            # 刻意不設 'filters'：不加 require_debug_true，DEBUG=False 時仍輸出
         },
     },
     'loggers': {
-        'django': {
-            'handlers': ['console'],
-            'level': 'ERROR',
-        },
+        # 未捕捉例外（500）與完整 Traceback 的來源；固定 ERROR，一律輸出
         'django.request': {
             'handlers': ['console'],
             'level': 'ERROR',
-            # 避免與上層 'django' logger 重複輸出
+            # 不再往上傳給 'django'，避免重複輸出
             'propagate': False,
         },
-        # 觀察 Cloudinary 上傳過程（含請求細節）
+        'django': {
+            'handlers': ['console'],
+            'level': DJANGO_LOG_LEVEL,
+        },
+        # 專案自己的 app
+        'collection': {
+            'handlers': ['console'],
+            'level': DJANGO_LOG_LEVEL,
+            'propagate': False,
+        },
+        # Cloudinary 上傳過程（方便在 Render Logs 觀察）
         'cloudinary': {
             'handlers': ['console'],
-            'level': 'DEBUG',
+            'level': DJANGO_LOG_LEVEL,
+            'propagate': False,
+        },
+        'cloudinary_storage': {
+            'handlers': ['console'],
+            'level': DJANGO_LOG_LEVEL,
             'propagate': False,
         },
     },
