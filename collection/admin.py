@@ -38,6 +38,24 @@ from .models import (
     ObservationImage, PublicationStatus, Species, SpeciesImage, Specimen,
     SpecimenImage,
 )
+from .validators import INVALID_IMAGE_MESSAGE
+
+
+class ImageErrorMessageAdminForm(forms.ModelForm):
+    """影像 inline 共用表單：只覆寫 image 欄位的 invalid_image 錯誤訊息。
+
+    django-unfold 的 widget／樣式由 ModelAdmin/Inline 的 formfield_for_dbfield
+    （formfield_callback）套用；這裡「只在 __init__ 事後改 error_messages」，
+    不重新宣告欄位、不動 widget，因此外觀與改動前完全一致，也不影響 model 定義
+    （不會產生 migration）。三個影像 inline（標本／物種／觀察）共用同一份表單。
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "image" in self.fields:
+            self.fields["image"].error_messages["invalid_image"] = (
+                INVALID_IMAGE_MESSAGE
+            )
 
 
 # ── 公開狀態徽章配色（Unfold @display(label=...)：值 → 語意色）─────────────
@@ -457,6 +475,7 @@ class SpeciesImageInline(TabularInline):
     """在物種頁面內嵌顯示其代表照片（比照標本影像 inline，含預覽縮圖）。"""
 
     model = SpeciesImage
+    form = ImageErrorMessageAdminForm
     extra = 0
     fields = (
         "image", "thumbnail", "image_type", "is_primary", "is_public",
@@ -477,6 +496,7 @@ class ObservationImageInline(TabularInline):
     """在觀察紀錄頁面內嵌顯示其現場照片（比照標本影像 inline，含預覽縮圖）。"""
 
     model = ObservationImage
+    form = ImageErrorMessageAdminForm
     extra = 0
     fields = (
         "image", "thumbnail", "image_type", "is_primary", "is_public",
@@ -627,6 +647,7 @@ class SpecimenImageInline(TabularInline):
     """在標本頁面內嵌顯示標本照片。"""
 
     model = SpecimenImage
+    form = ImageErrorMessageAdminForm
     extra = 0
     fields = (
         "image", "thumbnail", "image_type", "is_primary", "is_public",

@@ -11,6 +11,8 @@ import uuid
 from django.db import models
 from django.utils import timezone
 
+from .validators import validate_specimen_image
+
 # 典藏編號格式：LYM-[2碼類群]-[4碼年份]-[4碼流水號]，例：LYM-AV-2026-0001
 CATALOG_NUMBER_RE = re.compile(r"^LYM-[A-Z]{2}-\d{4}-\d{4}$")
 
@@ -740,7 +742,10 @@ class SpecimenImage(models.Model):
         Specimen, on_delete=models.CASCADE,
         related_name="images", verbose_name="標本",
     )
-    image = models.ImageField("影像檔", upload_to="specimen_images/")
+    image = models.ImageField(
+        "影像檔", upload_to="specimen_images/",
+        validators=[validate_specimen_image],
+    )
     image_type = models.CharField(
         "影像類型", max_length=20, choices=ImageType.choices,
     )
@@ -883,7 +888,10 @@ class SpeciesImage(BaseMediaImage):
         Species, on_delete=models.CASCADE,
         related_name="images", verbose_name="物種",
     )
-    image = models.ImageField("影像檔", upload_to="species_images/")
+    image = models.ImageField(
+        "影像檔", upload_to="species_images/",
+        validators=[validate_specimen_image],
+    )
 
     class Meta(BaseMediaImage.Meta):
         verbose_name = "物種影像"
@@ -902,7 +910,10 @@ class ObservationImage(BaseMediaImage):
         Observation, on_delete=models.CASCADE,
         related_name="images", verbose_name="觀察紀錄",
     )
-    image = models.ImageField("影像檔", upload_to="observation_images/")
+    image = models.ImageField(
+        "影像檔", upload_to="observation_images/",
+        validators=[validate_specimen_image],
+    )
 
     class Meta(BaseMediaImage.Meta):
         verbose_name = "觀察紀錄影像"

@@ -5,15 +5,24 @@
 """
 
 import datetime
+import io
+import struct
+import zlib
 
 from django.contrib.admin.sites import site
 from django.contrib.auth.models import Group, Permission, User
+from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
 from .admin import SpecimenAdmin
 from .models import (
     CollectionEvent, Observation, PublicationStatus, Species, Specimen,
+)
+from .validators import (
+    INVALID_IMAGE_MESSAGE, MAX_MEGAPIXELS, MAX_UPLOAD_BYTES,
+    validate_specimen_image,
 )
 
 
@@ -442,3 +451,135 @@ class LabelCsvExportTests(TestCase):
         self.assertNotIn("export_label_csv_big5", actions_for(view_only))
         self.assertIn("export_label_csv_utf8", actions_for(changer))
         self.assertIn("export_label_csv_big5", actions_for(changer))
+
+
+def _png_bytes(width, height):
+    """組出「只有檔頭有效」的極小 PNG：宣告尺寸為 width×height，但不含完整像素，
+    僅供 PIL.Image.open().size 讀取檔頭尺寸使用（不會佔用大量記憶體）。"""
+    def chunk(typ, data):
+        return (
+            struct.pack(">I", len(data)) + typ + data
+            + struct.pack(">I", zlib.crc32(typ + data) & 0xFFFFFFFF)
+        )
+    sig = b"\x89PNG\r\n\x1a\n"
+    ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+    idat = chunk(b"IDAT", zlib.compress(b"\x00"))
+    iend = chunk(b"IEND", b"")
+    return sig + ihdr + idat + iend
+
+
+class ImageValidatorTests(TestCase):
+    """標本影像上傳驗證：大小／像素／無法開啟三種情況與指標歸零。"""
+
+    def test_oversized_file_rejected_with_message(self):
+        content = b"\x00" * (6 * 1024 * 1024)   # 6 MB > 5 MB 上限
+        f = SimpleUploadedFile("big.jpg", content, content_type="image/jpeg")
+        with self.assertRaises(ValidationError) as cm:
+            validate_specimen_image(f)
+        msg = str(cm.exception)
+        self.assertIn("影像檔案過大", msg)
+        self.assertIn("目前 6.0 MB", msg)      # 動態帶入實際大小
+        self.assertIn("上限 5 MB", msg)
+        self.assertIn("標本影像作業規範", msg)   # 告訴使用者怎麼處理
+
+    def test_high_megapixels_rejected_with_message(self):
+        f = SimpleUploadedFile(
+            "huge.png", _png_bytes(6000, 5000), content_type="image/png",
+        )  # 30 MP > 25 MP，但檔案僅數十位元組
+        with self.assertRaises(ValidationError) as cm:
+            validate_specimen_image(f)
+        msg = str(cm.exception)
+        self.assertIn("影像像素過高", msg)
+        self.assertIn("目前 30.0 百萬畫素", msg)
+        self.assertIn("上限 25 百萬畫素", msg)
+        self.assertIn("2000 px", msg)
+
+    def test_unreadable_format_rejected_with_message(self):
+        f = SimpleUploadedFile(
+            "photo.heic", b"not a real image", content_type="image/heic",
+        )
+        with self.assertRaises(ValidationError) as cm:
+            validate_specimen_image(f)
+        msg = str(cm.exception)
+        # 與 admin invalid_image 訊息完全一致
+        self.assertIn(INVALID_IMAGE_MESSAGE, msg)
+        self.assertIn("HEIC", msg)
+        self.assertIn("檔案損毀", msg)
+        self.assertIn("JPEG", msg)
+        self.assertIn("標本影像作業規範", msg)
+
+    def test_valid_image_passes_and_resets_pointer(self):
+        f = SimpleUploadedFile(
+            "ok.png", _png_bytes(100, 100), content_type="image/png",
+        )
+        # 不應拋錯
+        validate_specimen_image(f)
+        # 指標必須歸零，否則後續上傳 Cloudinary 會拿到空檔案
+        self.assertEqual(f.tell(), 0)
+
+    def test_pointer_reset_even_when_unreadable(self):
+        f = SimpleUploadedFile("bad.heic", b"xxxx", content_type="image/heic")
+        with self.assertRaises(ValidationError):
+            validate_specimen_image(f)
+        self.assertEqual(f.tell(), 0)
+
+    def test_attached_to_three_image_fields(self):
+        for model_name in ("SpecimenImage", "SpeciesImage", "ObservationImage"):
+            model = __import__(
+                "collection.models", fromlist=[model_name]
+            ).__dict__[model_name]
+            validators = model._meta.get_field("image").validators
+            self.assertIn(
+                validate_specimen_image, validators,
+                f"{model_name}.image 未掛上 validate_specimen_image",
+            )
+
+    def test_constants(self):
+        self.assertEqual(MAX_UPLOAD_BYTES, 5 * 1024 * 1024)
+        self.assertEqual(MAX_MEGAPIXELS, 25)
+
+
+class AdminImageInlineMessageTests(TestCase):
+    """三個影像 inline 的 admin 表單覆寫 invalid_image 訊息（含 unfold 樣式保留檢查）。"""
+
+    def _inlines(self):
+        from .admin import (
+            ObservationImageInline, SpeciesImageInline, SpecimenImageInline,
+        )
+        return [
+            (SpecimenImageInline, Specimen),
+            (SpeciesImageInline, Species),
+            (ObservationImageInline, Observation),
+        ]
+
+    def test_all_three_inlines_override_invalid_image(self):
+        from django import forms as djforms
+
+        su = User.objects.create_superuser("su", "su@example.com", "x")
+        req = RequestFactory().get("/")
+        req.user = su
+
+        for inline_cls, parent_model in self._inlines():
+            inline = inline_cls(parent_model, site)
+            formset = inline.get_formset(req)
+            form = formset.form()   # 工廠已把 model 設好，__init__ 會套用覆寫
+            field = form.fields["image"]
+            # 訊息已被覆寫成統一文字
+            self.assertEqual(
+                field.error_messages["invalid_image"], INVALID_IMAGE_MESSAGE,
+                f"{inline_cls.__name__} 未覆寫 invalid_image",
+            )
+            # 欄位仍是 ImageField（沒有被重新宣告取代）
+            self.assertIsInstance(field, djforms.ImageField)
+            # unfold widget 仍生效（widget 由 formfield_callback 套用，未被動到）
+            self.assertIn(
+                "unfold", type(field.widget).__module__,
+                f"{inline_cls.__name__} 的 image widget 不是 unfold 樣式",
+            )
+
+    def test_message_matches_validator_message(self):
+        # validators.py 情況 (c) 與 admin 覆寫共用同一常數 → 兩條路徑一致
+        self.assertIn("無法讀取此影像檔", INVALID_IMAGE_MESSAGE)
+        self.assertIn("HEIC", INVALID_IMAGE_MESSAGE)
+        self.assertIn("標本影像作業規範", INVALID_IMAGE_MESSAGE)
+
