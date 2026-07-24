@@ -30,13 +30,15 @@ def _compute_new_number(specimen):
     else:
         candidate, year_int = None, None
 
-    # 無法解析、或新編號已被占用 → 改用該類群當年度的下一個可用號
+    # 無法解析、或新編號已被占用 → 改用該類群該年度的下一個可用號。
+    # next_catalog_number 已不再取系統時鐘，年份需明確提供：優先用舊編號解析出的
+    # 年份，解析不到則退回該標本的入藏年份 accession_year。
     if not candidate or (
         candidate != specimen.catalog_number
         and Specimen.objects.filter(pk=candidate).exists()
     ):
         candidate = Specimen.next_catalog_number(
-            specimen.taxon_group, year=year_int
+            specimen.taxon_group, year=year_int or specimen.accession_year
         )
     return candidate
 

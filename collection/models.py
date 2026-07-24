@@ -8,10 +8,21 @@
 import re
 import uuid
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
 from .validators import validate_specimen_image
+
+
+def current_year():
+    """入藏年份的預設值：目前年份。作為 callable 傳入 default（不加括號）。"""
+    return timezone.now().year
+
+
+def max_accession_year():
+    """入藏年份上限：當年加一（callable limit_value，Django 4.1+ 支援）。"""
+    return timezone.now().year + 1
 
 # 典藏編號格式：LYM-[2碼類群]-[4碼年份]-[4碼流水號]，例：LYM-AV-2026-0001
 CATALOG_NUMBER_RE = re.compile(r"^LYM-[A-Z]{2}-\d{4}-\d{4}$")
@@ -353,6 +364,12 @@ class Specimen(models.Model):
         blank=True,
         help_text="留空即依「分類群代碼-年份-流水號」自動產生（例：AVE-2026-0001）；也可自行填寫。",
     )
+    accession_year = models.PositiveIntegerField(
+        "入藏年份",
+        default=current_year,
+        validators=[MinValueValidator(1900), MaxValueValidator(max_accession_year)],
+        help_text="館方正式接受本件標本進入典藏的年度，非採集年。",
+    )
     occurrence_uuid = models.UUIDField(
         "全球唯一識別碼", default=uuid.uuid4, editable=False,
         unique=True, db_index=True,
@@ -573,14 +590,14 @@ class Specimen(models.Model):
         return self.BASIS_OF_RECORD
 
     @classmethod
-    def next_catalog_number(cls, taxon_group, year=None):
-        """依「LYM-類群代碼-年份-4位流水號」算出該類群當年度的下一個編號。
+    def next_catalog_number(cls, taxon_group, year):
+        """依「LYM-類群代碼-年份-4位流水號」算出該類群該年度的下一個編號。
 
-        流水號以「同類群代碼＋同年度」為範圍，從 0001 起遞增，
-        例如 LYM-AV-2026-0001、LYM-IN-2026-0023。
+        年份改由呼叫端提供（實際建號時來自標本的入藏年份 accession_year），
+        不再取用系統時鐘。流水號重置範圍維持不變：以「同類群代碼＋同年度」為
+        範圍，從 0001 起遞增，例如 LYM-AV-2026-0001、LYM-IN-2026-0023。
         """
         code = cls.GROUP_CODE[taxon_group]
-        year = year or timezone.localdate().year
         prefix = f"{cls.CATALOG_PREFIX}-{code}-{year}-"
         last = (
             cls.objects
@@ -592,8 +609,8 @@ class Specimen(models.Model):
         return f"{prefix}{last_serial + 1:04d}"
 
     def generate_catalog_number(self):
-        """為本標本（依其類群 taxon_group、當年度）產生下一個典藏編號。"""
-        return self.next_catalog_number(self.taxon_group)
+        """為本標本（依其類群 taxon_group、入藏年份 accession_year）產生下一個編號。"""
+        return self.next_catalog_number(self.taxon_group, self.accession_year)
 
     def save(self, *args, **kwargs):
         # 典藏編號留空時自動產生；已手填則尊重原值

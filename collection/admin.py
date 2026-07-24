@@ -699,8 +699,14 @@ class SpecimenAdmin(PublicationAdminMixin, ModelAdmin):
                 return JsonResponse({"catalog_number": ""})
         if taxon_group not in Specimen.GROUP_CODE:
             return JsonResponse({"catalog_number": ""})
+        # 預覽用年份：優先取表單傳入的入藏年份，否則以今年估算。此處僅為即時建議，
+        # 真正的建號一律於存檔時以標本的入藏年份 accession_year 為準。
+        try:
+            year = int(request.GET.get("year") or "")
+        except (TypeError, ValueError):
+            year = timezone.localdate().year
         return JsonResponse({
-            "catalog_number": Specimen.next_catalog_number(taxon_group),
+            "catalog_number": Specimen.next_catalog_number(taxon_group, year),
         })
     list_display = (
         "catalog_number", "species_or_group", "specimen_type", "status",
@@ -734,7 +740,7 @@ class SpecimenAdmin(PublicationAdminMixin, ModelAdmin):
     fieldsets = (
         ("基本資料", {
             "fields": (
-                "catalog_number", "occurrence_uuid",
+                "catalog_number", "accession_year", "occurrence_uuid",
                 "taxon_group", "identification_status",
                 "species_input", "species", "specimen_type",
                 "sex", "life_stage", "individual_count", "basis_of_record",
@@ -869,6 +875,29 @@ class SpecimenAdmin(PublicationAdminMixin, ModelAdmin):
                 request,
                 f"已自動產生典藏編號：{obj.catalog_number}",
                 level=messages.INFO,
+            )
+
+        # 警示 A：取得日期年份與入藏年份不一致（不阻擋存檔，僅提醒）
+        if (
+            obj.acquisition_date
+            and obj.acquisition_date.year != obj.accession_year
+        ):
+            self.message_user(
+                request,
+                "取得日期年份與入藏年份不一致，請確認是否正確",
+                level=messages.WARNING,
+            )
+
+        # 警示 B：典藏編號中的年份與入藏年份不符（編號不會自動更新）
+        catalog_match = re.match(
+            r"^LYM-[A-Z]{2}-(\d{4})-\d{4}$", obj.catalog_number or "",
+        )
+        if catalog_match and int(catalog_match.group(1)) != obj.accession_year:
+            self.message_user(
+                request,
+                "入藏年份已與典藏編號不符，編號不會自動更新，"
+                "如需更正請聯繫系統管理者",
+                level=messages.WARNING,
             )
 
     @admin.action(description="匯出為 Darwin Core CSV（僅公開資料）")
@@ -1237,7 +1266,7 @@ class SpecimenCollectionInline(TabularInline):
     fk_name = "collection_event"
     extra = 1
     fields = (
-        "catalog_number", "taxon_group", "species",
+        "catalog_number", "accession_year", "taxon_group", "species",
         "specimen_type", "identification_status",
     )
     autocomplete_fields = ("species",)
