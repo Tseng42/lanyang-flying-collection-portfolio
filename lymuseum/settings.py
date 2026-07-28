@@ -86,17 +86,24 @@ INSTALLED_APPS = [
     'unfold',
     'unfold.contrib.filters',
     'unfold.contrib.forms',
+    # 標本批次匯入的後台樣式（須排在 django.contrib.admin 之前，覆寫 import-export 模板）
+    'unfold.contrib.import_export',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # 標本批次匯入（django-import-export）
+    'import_export',
     # Cloudinary 媒體儲存（僅在設定 CLOUDINARY_URL 時實際生效）
     'cloudinary_storage',
     'cloudinary',
     'collection',
 ]
+
+# django-import-export：全程使用交易，任一列出錯即整批 rollback（保護資料一致性）
+IMPORT_EXPORT_USE_TRANSACTIONS = True
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

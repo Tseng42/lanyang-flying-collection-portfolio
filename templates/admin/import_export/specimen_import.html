@@ -1,0 +1,25 @@
+{% extends "admin/import_export/import.html" %}
+{% comment %}
+標本批次匯入頁：沿用 unfold 的 import-export 版面，僅在最上方加一段彙總預覽，
+顯示「將新增 X 件標本、Y 筆新物種、Z 筆採集事件」。彙總數字由
+SpecimenImportResource.after_import() 掛在 result 上（result.lanyang_*）。
+{% endcomment %}
+
+{% block content %}
+    {% if result and not result.has_errors and not result.has_validation_errors %}
+        <div class="mb-6 rounded-default border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-base-700 dark:border-primary-500/20 dark:bg-primary-500/10 dark:text-base-200">
+            <p class="font-semibold mb-1">匯入預覽</p>
+            <p>
+                本次將新增
+                <b>{{ result.lanyang_new_specimens }}</b> 件標本、
+                <b>{{ result.lanyang_new_species }}</b> 筆新物種、
+                <b>{{ result.lanyang_new_events }}</b> 筆採集事件。
+            </p>
+            <p class="mt-1 text-base-500 dark:text-base-400">
+                請確認下方逐列預覽無誤後，按「確認匯入」正式寫入；此步驟尚未寫入資料庫。
+            </p>
+        </div>
+    {% endif %}
+
+    {{ block.super }}
+{% endblock %}

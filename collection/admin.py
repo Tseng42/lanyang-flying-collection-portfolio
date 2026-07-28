@@ -23,7 +23,9 @@ from django.http import HttpResponse, JsonResponse
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from import_export.admin import ImportMixin
 from unfold.admin import ModelAdmin, TabularInline
+from unfold.contrib.import_export.forms import ImportForm
 from unfold.decorators import display
 from unfold.forms import (
     AdminPasswordChangeForm,
@@ -38,6 +40,7 @@ from .models import (
     ObservationImage, PublicationStatus, Species, SpeciesImage, Specimen,
     SpecimenImage,
 )
+from .resources import SpecimenImportResource
 from .validators import INVALID_IMAGE_MESSAGE
 
 
@@ -657,10 +660,44 @@ class IdentificationInline(TabularInline):
 
 
 @admin.register(Specimen)
-class SpecimenAdmin(PublicationAdminMixin, ModelAdmin):
+class SpecimenAdmin(PublicationAdminMixin, ImportMixin, ModelAdmin):
     form = SpecimenAdminForm
     publish_permission = "collection.can_publish_specimen"
     inlines = (IdentificationInline, MovementInline, SpecimenImageInline)
+    # ── 標本批次匯入（django-import-export ＋ unfold 樣式）─────────────────
+    # 「匯入」按鈕出現在標本清單頁；上傳範本後先 dry-run 預覽，確認才寫入。
+    resource_classes = [SpecimenImportResource]
+    import_form_class = ImportForm
+    # 自訂模板：在預覽頁最上方顯示「將新增 X 件標本、Y 筆新物種、Z 筆採集事件」
+    import_template_name = "admin/import_export/specimen_import.html"
+
+    def has_import_permission(self, request):
+        """可匯入者需同時具備新增標本與新增物種權限（匯入會一併建立物種）。
+        對應群組：登錄員／典藏主管／管理員可匯入；唯讀研究員不可。"""
+        return request.user.has_perm(
+            "collection.add_specimen"
+        ) and request.user.has_perm("collection.add_species")
+
+    def get_import_data_kwargs(self, **kwargs):
+        """確保「確認匯入」階段也在驗證錯誤時整批 rollback。
+
+        import-export 於 dry-run 已會攔下驗證錯誤；此處額外要求正式匯入時
+        （萬一預覽後資料狀態改變而出現驗證錯誤）同樣整批回滾，符合
+        「任一列出錯就整批 rollback」的要求。"""
+        import_kwargs = super().get_import_data_kwargs(**kwargs)
+        import_kwargs["rollback_on_validation_errors"] = True
+        return import_kwargs
+
+    def add_success_message(self, result, request):
+        """實際匯入完成後的訊息，改用本系統的彙總數字（含新物種／採集事件）。"""
+        self.message_user(
+            request,
+            "批次匯入完成："
+            f"新增 {getattr(result, 'lanyang_new_specimens', 0)} 件標本、"
+            f"{getattr(result, 'lanyang_new_species', 0)} 筆新物種、"
+            f"{getattr(result, 'lanyang_new_events', 0)} 筆採集事件。",
+            level=messages.SUCCESS,
+        )
     actions = [
         "make_published", "make_review", "make_draft",
         "export_darwin_core_csv", "export_darwin_core_csv_with_unpublished",

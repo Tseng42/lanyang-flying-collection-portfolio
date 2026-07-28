@@ -15,6 +15,9 @@ backups/
 # ---- 使用者上傳的媒體檔 ----
 media/
 
+# ---- 批次匯入產生的空白範本（可由 make_import_template 指令重新產生）----
+lanyang_specimen_import_template.xlsx
+
 # ---- 收集後的靜態檔（部署時由 collectstatic 產生）----
 staticfiles/
 
