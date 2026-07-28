@@ -10,3 +10,71 @@ msgstr ""
 # 覆寫 unfold 登入頁的忘記密碼連結文字（原字串為英文）。
 msgid "Forgotten your password or username?"
 msgstr "忘記密碼？"
+
+# ---------------------------------------------------------------------------
+# django-import-export 繁體中文（套件僅內建 zh_Hans 簡體，無 zh_Hant；
+# Django 不會由 zh-hant 回退到 zh_Hans，故於專案 catalog 補上繁中）。
+# msgid 必須與套件原字串完全一致（含結尾空白）。
+# ---------------------------------------------------------------------------
+msgid "Import"
+msgstr "匯入"
+
+msgid "Import finished: {} new, {} updated, {} deleted and {} skipped {}."
+msgstr "匯入完成：新增 {} 筆、更新 {} 筆、刪除 {} 筆、略過 {} 筆 {}。"
+
+msgid "Resource"
+msgstr "資源"
+
+msgid "Format"
+msgstr "格式"
+
+msgid "File to import"
+msgstr "要匯入的檔案"
+
+msgid "Submit"
+msgstr "送出"
+
+msgid "This importer will import the following fields: "
+msgstr "本次匯入將匯入下列欄位： "
+
+msgid "Below is a preview of data to be imported. If you are satisfied with the results, click 'Confirm import'"
+msgstr "以下是即將匯入的資料預覽。若確認無誤，請點選「確認匯入」。"
+
+msgid "Confirm import"
+msgstr "確認匯入"
+
+msgid "Preview"
+msgstr "預覽"
+
+msgid "New"
+msgstr "新增"
+
+msgid "Skipped"
+msgstr "略過"
+
+msgid "Delete"
+msgstr "刪除"
+
+msgid "Update"
+msgstr "更新"
+
+msgid "Errors"
+msgstr "錯誤"
+
+msgid "Line number"
+msgstr "行號"
+
+msgid "View traceback"
+msgstr "檢視錯誤追蹤"
+
+msgid "Some rows failed to validate"
+msgstr "部分資料列未通過驗證"
+
+msgid "Please correct these errors in your data where possible, then reupload it using the form above."
+msgstr "請盡可能修正資料中的這些錯誤，再以上方表單重新上傳。"
+
+msgid "Row"
+msgstr "列"
+
+msgid "Non field specific"
+msgstr "非特定欄位"
