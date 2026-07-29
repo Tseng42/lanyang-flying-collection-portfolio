@@ -517,6 +517,10 @@ class SpeciesAdminForm(forms.ModelForm):
             ),
             "iucn_status": "IUCN 紅皮書受威脅等級。",
             "introduction": "公開頁顯示的物種簡介，請以淺白文字介紹。",
+            "is_auto_created": "系統自動建立的物種會勾選此項，代表資料尚未補齊、不會顯示於公開簡易版。補齊分類階層與保育等級後，請「取消勾選」並儲存，該物種才會出現在公開簡易版。",
+        }
+        labels = {
+            "is_auto_created": "系統自動建立（待查證）",
         }
 
 
@@ -571,7 +575,7 @@ class SpeciesAdmin(PublicationAdminMixin, ModelAdmin):
 
     fieldsets = (
         ("公開設定", {
-            "fields": ("publication_status",),
+            "fields": ("publication_status", "is_auto_created"),
             "description": (
                 "僅「公開」狀態的物種會出現在對外檢索、物種頁與公開統計；"
                 "草稿與待審僅供館內作業。設為公開需具備公開權限。"
