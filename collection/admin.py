@@ -526,13 +526,13 @@ class SpeciesAdmin(PublicationAdminMixin, ModelAdmin):
     publish_permission = "collection.can_publish_species"
     list_display = (
         "common_name", "scientific_name_italic", "taxon_group",
-        "conservation_status", "publication_badge",
+        "conservation_status", "publication_badge", "is_auto_created",
     )
     list_filter = (
         "publication_status", "taxon_group", "conservation_status",
         "is_auto_created",
     )
-    actions = ["make_published", "make_review", "make_draft"]
+    actions = ["make_published", "make_review", "make_draft", "make_verified"]
     search_fields = ("common_name", "scientific_name")
     inlines = (SpeciesImageInline, SpecimenInline, ObservationInline)
 
@@ -550,6 +550,15 @@ class SpeciesAdmin(PublicationAdminMixin, ModelAdmin):
                 "在此之前，公開頁會以保護性方式處理其觀察影像與地點。",
                 level=messages.WARNING,
             )
+
+    @admin.action(description="標記為已查證（清除自動建立標示，將顯示於公開簡易版）")
+    def make_verified(self, request, queryset):
+        updated = queryset.update(is_auto_created=False)
+        self.message_user(
+            request,
+            f"已將 {updated} 筆物種標記為已查證，這些物種將顯示於公開簡易版。",
+            level=messages.SUCCESS,
+        )
 
     @admin.display(description="學名", ordering="scientific_name")
     def scientific_name_italic(self, obj):
