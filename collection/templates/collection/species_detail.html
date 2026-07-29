@@ -18,6 +18,9 @@
         {% if protected %}<span class="tag cons-{{ species.conservation_status }}">保育類</span>{% endif %}
         {% if is_research and species.is_auto_created %}<span class="tag cons-unverified">待查證</span>{% endif %}
       </h1>
+      {% if species.other_common_names %}
+        <p class="other-common-names muted" style="font-size:0.85em; color:#888; margin:0 0 2px;">別名：{{ species.other_common_names }}</p>
+      {% endif %}
       <p class="sci muted" style="margin:0;">{{ species.scientific_name }}</p>
     </div>
     <!-- 兩層檢視切換鈕（切換時以帶 ?view 參數的網址重新載入，由後端決定內容） -->

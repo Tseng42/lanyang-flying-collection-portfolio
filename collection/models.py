@@ -86,6 +86,11 @@ class Species(models.Model):
     common_name = models.CharField(
         "中文名", max_length=200, blank=True,
     )
+    other_common_names = models.CharField(
+        max_length=255, blank=True, default="",
+        verbose_name="其他中文名",
+        help_text="物種的其他中文俗名或別名，多個請以頓號「、」分隔，例如：魚狗、釣魚翁。",
+    )
     scientific_name = models.CharField(
         "學名／拉丁名", max_length=200, unique=True,
     )

@@ -583,7 +583,8 @@ class SpeciesAdmin(PublicationAdminMixin, ModelAdmin):
         }),
         ("基本分類", {
             "fields": (
-                "common_name", "scientific_name", "scientific_name_authorship",
+                "common_name", "other_common_names",
+                "scientific_name", "scientific_name_authorship",
                 "taicol_taxon_id", "taxon_group", "order", "family", "genus",
             ),
             "description": "必填欄位：<b>學名</b>、<b>分類群</b>（表單中以粗體標示）。",
