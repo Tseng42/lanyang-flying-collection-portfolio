@@ -119,14 +119,14 @@
     /* 基礎規則加上柔滑過渡（覆寫 .panel 的 transition，僅限入口卡片），
        讓 hover 進出時背景／邊框顏色都淡入淡出，不瞬間切換。 */
     .entry-card{ text-align:center; padding:40px 26px;
-                 transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
+                 transition:background-color .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease; }
     .entry-card .ico{ font-size:42px; }
     .entry-card .t{ font-family:var(--serif); font-size:22px; font-weight:700; margin:14px 0 6px; color:var(--navy-ink); }
     /* 入口卡片 hover 改為「上色」效果，與下方館員入口 (.staff-bar) 對齊：
        取代 .panel 預設的陰影／浮出。
        選擇器帶 a 提升特異度以覆蓋上方 a.panel:hover。 */
-    a.entry-card:hover{ background:#e6d6ad; border-color:#cdb98d;
-                        transform:translateY(-1px); box-shadow:none; }
+    a.entry-card:hover{ background:#E8E8E8; border-color:#DCDCDC;
+                        transform:translateY(-1px); box-shadow:0 4px 14px rgba(0,0,0,.10); }
     .staff-bar{ display:flex; align-items:center; gap:12px; margin-top:26px; padding:16px 20px;
                 border:1px dashed #cdb98d; border-radius:14px; background:#fbf6ea; color:var(--muted);
                 transition:background-color .3s ease, transform .3s var(--ease); }
