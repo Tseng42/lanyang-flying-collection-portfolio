@@ -9,6 +9,7 @@ import difflib
 import io
 import json
 import re
+import uuid
 import zipfile
 from urllib.parse import quote
 
@@ -18,6 +19,7 @@ from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.urls import path, reverse
@@ -36,9 +38,9 @@ from unfold.forms import (
 from unfold.widgets import INPUT_CLASSES
 
 from .models import (
-    CATALOG_NUMBER_RE, CollectionEvent, Identification, Movement, Observation,
-    ObservationImage, PublicationStatus, Species, SpeciesImage, Specimen,
-    SpecimenImage,
+    CATALOG_NUMBER_RE, CatalogNumberChange, CollectionEvent, Identification,
+    Movement, Observation, ObservationImage, PublicationStatus, Species,
+    SpeciesImage, Specimen, SpecimenImage,
 )
 from .resources import SpecimenImportResource
 from .validators import INVALID_IMAGE_MESSAGE
@@ -365,12 +367,33 @@ class SpecimenAdminForm(forms.ModelForm):
 
     def clean_catalog_number(self):
         value = (self.cleaned_data.get("catalog_number") or "").strip()
+        # 編輯既有標本時（superuser 才可改此欄）不可清空：既有標本主鍵留空會觸發
+        # 自動重編，反而製造重複列與孤兒關聯。新增時留空才允許自動產生。
+        if not self.instance._state.adding and not value:
+            raise forms.ValidationError(
+                "既有標本的典藏編號不可清空。如需變更，請直接填入新的編號。"
+            )
         # 留空 → 存檔時自動產生；有填才驗證格式
         if value and not CATALOG_NUMBER_RE.match(value):
             raise forms.ValidationError(
                 "典藏編號格式不符。正確格式為 LYM-類群代碼-年份-4位流水號，"
                 "例如：LYM-AV-2026-0001（類群代碼：鳥=AV、昆蟲=IN、蝙蝠飛鼠=MA）。"
             )
+        # 唯一性驗證：典藏編號為主鍵，不得與其他標本重複。
+        # superuser 修改既有標本編號、或新增時手填編號，都在此擋下重複值。
+        # clean_<field> 階段 self.instance 仍保有載入時的原始主鍵，故可據以排除自己。
+        if value:
+            original_pk = (
+                None if self.instance._state.adding else self.instance.pk
+            )
+            duplicates = Specimen.objects.filter(pk=value)
+            if original_pk:
+                duplicates = duplicates.exclude(pk=original_pk)
+            if duplicates.exists():
+                raise forms.ValidationError(
+                    "此典藏編號已被其他標本使用（典藏編號為主鍵，必須唯一），"
+                    "請改用不重複的編號。"
+                )
         return value
 
     def clean(self):
@@ -860,8 +883,15 @@ class SpecimenAdmin(PublicationAdminMixin, ImportMixin, ModelAdmin):
         for field in ("basis_of_record", "occurrence_uuid"):
             if field not in readonly:
                 readonly.append(field)
-        if obj is not None and "catalog_number" not in readonly:
-            # 編輯既有標本時鎖定典藏編號（主鍵），避免改動造成關聯錯亂
+        # 典藏編號（主鍵）預設鎖定，避免改動造成關聯錯亂；
+        # 唯有「編輯既有標本」且操作者為 superuser 時才開放編輯，
+        # 變更時於 save_model 內以交易搬移子表關聯（見 _relocate_catalog_number）。
+        # 新增標本頁（obj is None）維持原本可留空自動產生的行為，不列入唯讀。
+        if (
+            obj is not None
+            and not request.user.is_superuser
+            and "catalog_number" not in readonly
+        ):
             readonly.append("catalog_number")
         return readonly
 
@@ -919,14 +949,28 @@ class SpecimenAdmin(PublicationAdminMixin, ImportMixin, ModelAdmin):
                     level=messages.INFO,
                 )
 
+        # 判斷 superuser 是否變更了典藏編號（主鍵）。
+        # clean 階段起 form.initial 保有載入時的原始主鍵，obj.catalog_number 已是新值。
+        original_pk = form.initial.get("catalog_number") if change else None
+        new_pk = (obj.catalog_number or "").strip()
+        pk_changed = bool(
+            change and original_pk and new_pk and original_pk != new_pk
+        )
+
         auto = not obj.catalog_number
-        super().save_model(request, obj, form, change)
-        if auto:
-            self.message_user(
-                request,
-                f"已自動產生典藏編號：{obj.catalog_number}",
-                level=messages.INFO,
-            )
+        if pk_changed:
+            # get_readonly_fields 已保證僅 superuser 能送出新編號；此處僅在後端再次確認。
+            if not request.user.is_superuser:
+                raise PermissionDenied("僅具備管理員權限者可變更典藏編號。")
+            self._relocate_catalog_number(request, obj, original_pk, new_pk)
+        else:
+            super().save_model(request, obj, form, change)
+            if auto:
+                self.message_user(
+                    request,
+                    f"已自動產生典藏編號：{obj.catalog_number}",
+                    level=messages.INFO,
+                )
 
         # 警示 A：取得日期年份與入藏年份不一致（不阻擋存檔，僅提醒）
         if (
@@ -950,6 +994,71 @@ class SpecimenAdmin(PublicationAdminMixin, ImportMixin, ModelAdmin):
                 "如需更正請聯繫系統管理者",
                 level=messages.WARNING,
             )
+
+    @transaction.atomic
+    def _relocate_catalog_number(self, request, obj, old_pk, new_pk):
+        """superuser 變更典藏編號（主鍵）時，於單一交易內安全地搬移整筆資料。
+
+        典藏編號是 Specimen 的主鍵，且 Movement／Identification／SpecimenImage
+        以 CASCADE、CatalogNumberChange 以 SET_NULL 外鍵指向它。若直接 obj.save()，
+        Django 會以新主鍵找不到既有列而改為 INSERT，留下重複列與孤兒關聯。故改以
+        下列步驟在交易內搬移：
+          1. 以新編號 INSERT 一列（force_insert，因 obj 為既載入之實例）。
+          2. 將所有子表外鍵由舊編號改指向新編號；含既有的 CatalogNumberChange
+             稽核列——它是 SET_NULL，若不先搬走，下方刪舊列時會被靜默設為 NULL，
+             造成「同一標本改第二次以上」時早期稽核紀錄的 specimen 斷鏈成孤兒。
+          3. 子關聯皆已搬離，安全刪除舊編號那一列（此時已無任何 FK 指向它）。
+          4. 還原原始 occurrence_uuid（見下）。
+          5. 於 CatalogNumberChange 留下「舊編號 → 新編號、修改者、時間」稽核紀錄
+             （specimen 指向新列 new_pk）。
+
+        occurrence_uuid 是 unique 且「產生後不得變更」的全球識別碼，須隨標本延續。
+        但新舊兩列在刪除舊列前會短暫並存，同一 uuid 會觸發 unique 衝突；故新列先以
+        暫時 uuid 插入，待舊列刪除後再還原原始 uuid，識別碼實質不變。
+
+        注意：本功能「不」更動 Cloudinary 上的影像檔名。標本影像雖以典藏編號命名，
+        但改名不屬於這支功能的職責；此處僅搬移資料庫關聯，影像檔沿用原檔名不動。
+        """
+        original_uuid = obj.occurrence_uuid
+        obj.catalog_number = new_pk
+        # 暫時 uuid：避開與舊列 occurrence_uuid 的 unique 衝突（稍後還原）
+        obj.occurrence_uuid = uuid.uuid4()
+        # obj 為既載入實例（_state.adding=False），需強制 INSERT 才會以新主鍵建列
+        obj.save(force_insert=True)
+
+        # 搬移子表關聯：先改指向新列，舊列才可安全刪除
+        Movement.objects.filter(specimen_id=old_pk).update(specimen_id=new_pk)
+        Identification.objects.filter(
+            specimen_id=old_pk
+        ).update(specimen_id=new_pk)
+        SpecimenImage.objects.filter(
+            specimen_id=old_pk
+        ).update(specimen_id=new_pk)
+        # CatalogNumberChange 為 SET_NULL：必須在刪舊列前一併搬走，否則早期稽核列
+        # 的 specimen 會被刪除連帶靜默設為 NULL。
+        CatalogNumberChange.objects.filter(
+            specimen_id=old_pk
+        ).update(specimen_id=new_pk)
+
+        # 子關聯皆已搬離，刪除舊列不會 CASCADE／SET_NULL 波及任何子資料
+        Specimen.objects.filter(pk=old_pk).delete()
+
+        # 舊列已刪，unique 衝突解除 → 還原原始全球唯一識別碼
+        Specimen.objects.filter(pk=new_pk).update(occurrence_uuid=original_uuid)
+        obj.occurrence_uuid = original_uuid  # 同步記憶體實例，供後續程式使用
+
+        CatalogNumberChange.objects.create(
+            specimen=obj,
+            old_catalog_number=old_pk,
+            new_catalog_number=new_pk,
+            changed_by=request.user,
+        )
+        self.message_user(
+            request,
+            f"典藏編號已由 {old_pk} 變更為 {new_pk}，"
+            "關聯的異動／鑑定／影像資料已一併搬移，並記錄於「典藏編號異動」。",
+            level=messages.SUCCESS,
+        )
 
     @admin.action(description="匯出為 Darwin Core CSV（僅公開資料）")
     def export_darwin_core_csv(self, request, queryset):
@@ -1356,6 +1465,29 @@ class CollectionEventAdmin(ModelAdmin):
     @admin.display(description="標本數")
     def specimen_count(self, obj):
         return obj.specimens.count()
+
+
+@admin.register(CatalogNumberChange)
+class CatalogNumberChangeAdmin(ModelAdmin):
+    """典藏編號異動：唯讀稽核紀錄，僅供查閱，一律由系統於變更編號時自動寫入。"""
+
+    list_display = (
+        "old_catalog_number", "new_catalog_number", "changed_by", "changed_at",
+    )
+    search_fields = ("old_catalog_number", "new_catalog_number")
+    list_filter = ("changed_at",)
+    readonly_fields = (
+        "specimen", "old_catalog_number", "new_catalog_number",
+        "changed_by", "changed_at",
+    )
+
+    def has_add_permission(self, request):
+        # 僅能由系統自動寫入，禁止人工新增
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        # 稽核紀錄不可竄改
+        return False
 
 
 # ---------------------------------------------------------------------------

@@ -11,14 +11,16 @@ import zlib
 
 from django.contrib.admin.sites import site
 from django.contrib.auth.models import Group, Permission, User
+from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
-from .admin import SpecimenAdmin
+from .admin import SpecimenAdmin, SpecimenAdminForm
 from .models import (
-    CollectionEvent, Observation, PublicationStatus, Species, Specimen,
+    CatalogNumberChange, CollectionEvent, Identification, Movement,
+    Observation, PublicationStatus, Species, Specimen, SpecimenImage,
 )
 from .validators import (
     INVALID_IMAGE_MESSAGE, MAX_MEGAPIXELS, MAX_UPLOAD_BYTES,
@@ -361,7 +363,8 @@ class LabelCsvExportTests(TestCase):
             "LYM-AV-2026-0001｜東方環頸鴴｜Charadrius alexandrinus｜"
             "採集 2026-03-15｜典藏 2026-04-01｜宜蘭縣五結鄉蘭陽溪口北岸｜王小明"
         )
-        print("\n[QR內容] " + row[7])   # 供人工確認格式
+        # 格式由下方 assertEqual 驗證；原本此處有 print() 供人工目視，
+        # 但在 Windows cp950 主控台會對中文拋 UnicodeEncodeError，故移除。
         self.assertEqual(row[7], expected_qr)
         # 前七欄為原始文字（日期無「採集／典藏」前綴）
         self.assertEqual(row[:7], [
@@ -582,4 +585,224 @@ class AdminImageInlineMessageTests(TestCase):
         self.assertIn("無法讀取此影像檔", INVALID_IMAGE_MESSAGE)
         self.assertIn("HEIC", INVALID_IMAGE_MESSAGE)
         self.assertIn("標本影像作業規範", INVALID_IMAGE_MESSAGE)
+
+
+class _FakeSpecimenForm:
+    """替 save_model 準備最小可用的表單替身。
+
+    save_model 只會讀取 form.initial（取原始主鍵）與 new_species_name／
+    resolved_species（學名解析結果）；此處學名不變動，兩者皆設 None。
+    """
+
+    def __init__(self, original_catalog_number):
+        self.initial = {"catalog_number": original_catalog_number}
+        self.new_species_name = None
+        self.resolved_species = None
+
+
+class CatalogNumberRelocationTests(TestCase):
+    """superuser 變更典藏編號（主鍵）時，子表關聯應完整搬移、無孤兒、無重複，
+    且每次變更都留下可反查的稽核紀錄（CatalogNumberChange）。"""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.su = User.objects.create_superuser("root", "root@example.com", "x")
+        cls.species = Species.objects.create(
+            common_name="大冠鷲", scientific_name="Spilornis cheela",
+            taxon_group=Species.TaxonGroup.BIRD,
+            conservation_status=Species.ConservationStatus.GENERAL,
+        )
+
+    def _admin(self):
+        return SpecimenAdmin(Specimen, site)
+
+    def _su_request(self):
+        """帶 messages 儲存的 superuser 請求（save_model 會呼叫 message_user）。"""
+        req = RequestFactory().post("/admin/collection/specimen/")
+        req.user = User.objects.get(pk=self.su.pk)
+        req.session = {}
+        setattr(req, "_messages", FallbackStorage(req))
+        return req
+
+    def _make_specimen(self, catalog_number):
+        sp = Specimen.objects.create(
+            catalog_number=catalog_number,
+            taxon_group=Specimen.TaxonGroup.BIRD,
+            specimen_type=Specimen.SpecimenType.TAXIDERMY,
+            accession_year=2026,
+        )
+        Movement.objects.create(
+            specimen=sp,
+            movement_type=Movement.MovementType.STORE_IN,
+            movement_date=datetime.date(2026, 1, 1),
+        )
+        Identification.objects.create(
+            specimen=sp, identified_as=self.species,
+            identified_date=datetime.date(2026, 1, 2),
+        )
+        SpecimenImage.objects.create(
+            specimen=sp, image_type=SpecimenImage.ImageType.BODY,
+            image=SimpleUploadedFile("body.jpg", b"not-really-an-image"),
+        )
+        return sp
+
+    def _rename(self, new_number, original_number):
+        """透過 admin.save_model 走完整改主鍵流程（含 superuser／pk 變更判斷）。"""
+        admin = self._admin()
+        obj = Specimen.objects.get(pk=original_number)  # 既載入實例
+        obj.catalog_number = new_number
+        form = _FakeSpecimenForm(original_number)
+        admin.save_model(self._su_request(), obj, form, change=True)
+
+    # ── 4. 改編號 → 關聯搬移成功 + 寫入異動紀錄 ──────────────────────────
+    def test_rename_relocates_children_and_writes_audit(self):
+        sp = self._make_specimen("LYM-AV-2026-0001")
+        original_uuid = sp.occurrence_uuid
+        self._rename("LYM-AV-2026-9001", "LYM-AV-2026-0001")
+
+        # 舊列消失、新列存在
+        self.assertFalse(Specimen.objects.filter(pk="LYM-AV-2026-0001").exists())
+        self.assertTrue(Specimen.objects.filter(pk="LYM-AV-2026-9001").exists())
+        # 全球唯一識別碼隨標本延續、不變（新列還原為原始 uuid）
+        moved = Specimen.objects.get(pk="LYM-AV-2026-9001")
+        self.assertEqual(moved.occurrence_uuid, original_uuid)
+        # 三張子表都指向新編號
+        self.assertEqual(
+            Movement.objects.filter(specimen_id="LYM-AV-2026-9001").count(), 1
+        )
+        self.assertEqual(
+            Identification.objects.filter(
+                specimen_id="LYM-AV-2026-9001"
+            ).count(), 1
+        )
+        self.assertEqual(
+            SpecimenImage.objects.filter(
+                specimen_id="LYM-AV-2026-9001"
+            ).count(), 1
+        )
+        # 寫入一筆稽核紀錄，指向新編號、記錄舊→新與修改者
+        change = CatalogNumberChange.objects.get()
+        self.assertEqual(change.old_catalog_number, "LYM-AV-2026-0001")
+        self.assertEqual(change.new_catalog_number, "LYM-AV-2026-9001")
+        self.assertEqual(change.specimen_id, "LYM-AV-2026-9001")
+        self.assertEqual(change.changed_by_id, self.su.pk)
+
+    # ── 5. 重複編號被擋下（繁中錯誤）─────────────────────────────────
+    def test_duplicate_catalog_number_rejected(self):
+        self._make_specimen("LYM-AV-2026-0001")
+        other = self._make_specimen("LYM-AV-2026-0002")
+
+        # 把 other 改成已存在的 0001 → 表單驗證應擋下
+        form = SpecimenAdminForm(
+            data={
+                "catalog_number": "LYM-AV-2026-0001",
+                "accession_year": other.accession_year,
+                "taxon_group": Specimen.TaxonGroup.BIRD,
+                "identification_status": (
+                    Specimen.IdentificationStatus.UNIDENTIFIED
+                ),
+                "specimen_type": Specimen.SpecimenType.TAXIDERMY,
+                "individual_count": 1,
+                "publication_status": PublicationStatus.DRAFT,
+                "status": Specimen.Status.IN_STORAGE,
+            },
+            instance=Specimen.objects.get(pk="LYM-AV-2026-0002"),
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("catalog_number", form.errors)
+        self.assertIn("已被其他標本使用", str(form.errors["catalog_number"]))
+        # 兩件標本都還在、未被搬動
+        self.assertTrue(Specimen.objects.filter(pk="LYM-AV-2026-0001").exists())
+        self.assertTrue(Specimen.objects.filter(pk="LYM-AV-2026-0002").exists())
+
+    # ── 6. 改編號後：每張子表筆數不變、無孤兒、無重複 ───────────────────
+    def test_no_orphans_no_duplicates_after_rename(self):
+        self._make_specimen("LYM-AV-2026-0001")
+        self._rename("LYM-AV-2026-9001", "LYM-AV-2026-0001")
+
+        for model in (Movement, Identification, SpecimenImage):
+            # 總筆數不變（仍為 1）
+            self.assertEqual(model.objects.count(), 1, model.__name__)
+            # 無指向已不存在標本的孤兒
+            orphans = model.objects.exclude(
+                specimen_id__in=Specimen.objects.values("pk")
+            )
+            self.assertEqual(orphans.count(), 0, f"{model.__name__} 出現孤兒")
+            # 無殘留指向舊編號者
+            self.assertEqual(
+                model.objects.filter(
+                    specimen_id="LYM-AV-2026-0001"
+                ).count(), 0, f"{model.__name__} 殘留舊編號",
+            )
+        # Specimen 本身無重複（新編號僅一列）
+        self.assertEqual(Specimen.objects.count(), 1)
+
+    # ── 7. 關鍵案例：連續改兩次，早期稽核列不得斷鏈成 NULL ──────────────
+    def test_double_rename_keeps_earlier_audit_linked(self):
+        self._make_specimen("LYM-AV-2026-0001")
+        self._rename("LYM-AV-2026-9001", "LYM-AV-2026-0001")  # 第一次
+        self._rename("LYM-AV-2026-9002", "LYM-AV-2026-9001")  # 第二次
+
+        # 標本最終編號
+        self.assertTrue(Specimen.objects.filter(pk="LYM-AV-2026-9002").exists())
+        self.assertEqual(Specimen.objects.count(), 1)
+
+        # 共兩筆稽核紀錄，皆非孤兒、皆指向最新編號
+        changes = CatalogNumberChange.objects.all()
+        self.assertEqual(changes.count(), 2)
+        for c in changes:
+            self.assertIsNotNone(
+                c.specimen_id, "早期稽核紀錄的 specimen 被靜默設為 NULL"
+            )
+            self.assertEqual(c.specimen_id, "LYM-AV-2026-9002")
+
+        # 第一次那筆（0001→9001）仍在、specimen 未斷鏈
+        first = CatalogNumberChange.objects.get(
+            old_catalog_number="LYM-AV-2026-0001"
+        )
+        self.assertEqual(first.new_catalog_number, "LYM-AV-2026-9001")
+        self.assertEqual(first.specimen_id, "LYM-AV-2026-9002")
+
+        # 兩筆都能從標本頁（reverse 關聯）反查到
+        specimen = Specimen.objects.get(pk="LYM-AV-2026-9002")
+        self.assertEqual(specimen.catalog_number_changes.count(), 2)
+
+    # ── 搬移中途失敗 → 整批 rollback，標本不得停留在暫時 uuid 狀態 ──────
+    def test_relocation_rolls_back_on_error(self):
+        from unittest import mock
+
+        sp = self._make_specimen("LYM-AV-2026-0001")
+        original_uuid = sp.occurrence_uuid
+
+        admin = self._admin()
+        obj = Specimen.objects.get(pk="LYM-AV-2026-0001")  # 既載入實例
+        obj.catalog_number = "LYM-AV-2026-9001"
+        form = _FakeSpecimenForm("LYM-AV-2026-0001")
+
+        # 在最後一步（寫稽核紀錄）注入例外：此時暫時 uuid 已寫入、舊列已刪，
+        # 若非同一交易，標本會卡在暫時 uuid；atomic 應把整批回滾。
+        with mock.patch.object(
+            CatalogNumberChange.objects, "create",
+            side_effect=RuntimeError("模擬搬移中途失敗"),
+        ):
+            with self.assertRaises(RuntimeError):
+                admin.save_model(self._su_request(), obj, form, change=True)
+
+        # 整批 rollback：舊編號那列還在、新編號不存在
+        self.assertTrue(Specimen.objects.filter(pk="LYM-AV-2026-0001").exists())
+        self.assertFalse(
+            Specimen.objects.filter(pk="LYM-AV-2026-9001").exists()
+        )
+        # 關鍵：occurrence_uuid 與 catalog_number 都維持原值（未停在暫時 uuid）
+        restored = Specimen.objects.get(pk="LYM-AV-2026-0001")
+        self.assertEqual(restored.occurrence_uuid, original_uuid)
+        self.assertEqual(restored.catalog_number, "LYM-AV-2026-0001")
+        # 子表仍指向原編號、無孤兒；稽核表無殘留
+        for model in (Movement, Identification, SpecimenImage):
+            self.assertEqual(
+                model.objects.filter(
+                    specimen_id="LYM-AV-2026-0001"
+                ).count(), 1, model.__name__,
+            )
+        self.assertEqual(CatalogNumberChange.objects.count(), 0)
 

@@ -8,6 +8,7 @@
 import re
 import uuid
 
+from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
@@ -944,3 +945,37 @@ class ObservationImage(BaseMediaImage):
 
     def __str__(self):
         return f"{self.observation_id}｜{self.get_image_type_display()}"
+
+
+class CatalogNumberChange(models.Model):
+    """典藏編號異動紀錄 — 專供記錄「典藏編號（主鍵）被人工變更」的稽核歷程。
+
+    典藏編號原則上是標本的永久主鍵、不應變動；僅 superuser 於必要時可修改。
+    每次修改都在此留下「舊編號 → 新編號、修改者、時間」，以利日後追查。
+    （與 Movement「異動紀錄」不同：Movement 記錄實體借還／送修，此表專記編號變更。）
+    """
+
+    # 指向變更後的標本（其主鍵已是新編號）。標本若日後刪除仍保留稽核紀錄，故用 SET_NULL。
+    specimen = models.ForeignKey(
+        Specimen, on_delete=models.SET_NULL,
+        related_name="catalog_number_changes", verbose_name="標本",
+        null=True, blank=True,
+    )
+    old_catalog_number = models.CharField("原典藏編號", max_length=50)
+    new_catalog_number = models.CharField("新典藏編號", max_length=50)
+    # 修改者；帳號若刪除仍保留紀錄，故用 SET_NULL
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        related_name="+", verbose_name="修改者",
+        null=True, blank=True,
+    )
+    changed_at = models.DateTimeField("修改時間", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "典藏編號異動"
+        verbose_name_plural = "典藏編號異動"
+        # 最新的異動排在最上面
+        ordering = ["-changed_at", "-id"]
+
+    def __str__(self):
+        return f"{self.old_catalog_number} → {self.new_catalog_number}"
