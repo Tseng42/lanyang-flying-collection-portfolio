@@ -93,10 +93,10 @@ class Species(models.Model):
         help_text="物種的其他中文俗名或別名，多個請以頓號「、」分隔，例如：魚狗、釣魚翁。",
     )
     scientific_name = models.CharField(
-        "學名／拉丁名", max_length=200, unique=True,
+        "學名", max_length=200, unique=True,
     )
     scientific_name_authorship = models.CharField(
-        "學名命名者", max_length=200, null=True, blank=True,
+        "命名者/年代", max_length=200, null=True, blank=True,
         help_text=(
             "學名的命名者與年份（對應 Darwin Core scientificNameAuthorship），"
             "例如 (Linnaeus, 1758)。可留空，之後由 TaiCOL 補齊。"

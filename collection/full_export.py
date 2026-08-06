@@ -83,8 +83,24 @@ def _cell_value(obj, field):
     return str(value)
 
 
+def _move_before(headers, getters, src_header, dst_header):
+    """就地把 src_header 欄搬到 dst_header 欄前面（僅用於「物種」工作表的學名前置）。"""
+    src = headers.index(src_header)
+    header, getter = headers.pop(src), getters.pop(src)
+    dst = headers.index(dst_header)
+    headers.insert(dst, header)
+    getters.insert(dst, getter)
+    return headers, getters
+
+
 def _columns(model):
-    """回傳 (headers, getters)。外鍵拆成「<名稱> ID」與「<名稱>」兩欄。"""
+    """回傳 (headers, getters)。外鍵拆成「<名稱> ID」與「<名稱>」兩欄。
+
+    另針對兩張工作表做欄位微調（僅影響「物種」「標本」，其餘模型維持原樣）：
+    - 物種：「學名」欄搬到「中文名」欄前面。
+    - 標本：在「學名」（species 外鍵可讀欄）正後方補一欄「中文名」，
+      值為該標本鑑定物種的中文名；未鑑定（species 為空）者留空。
+    """
     headers, getters = [], []
     for field in model._meta.fields:
         if field.is_relation:
@@ -100,9 +116,19 @@ def _columns(model):
             # 可讀識別欄
             headers.append(name)
             getters.append(lambda o, f=field: _fk_readable(getattr(o, f.name)))
+            # 標本：在「學名」欄正後方補「中文名」欄（沿 標本→物種 外鍵抓中文名）
+            if model.__name__ == "Specimen" and field.name == "species":
+                headers.append("中文名")
+                getters.append(
+                    lambda o: o.species.common_name if o.species_id else ""
+                )
         else:
             headers.append(str(field.verbose_name))
             getters.append(lambda o, f=field: _cell_value(o, f))
+
+    # 物種：把「學名」欄搬到「中文名」欄前面
+    if model.__name__ == "Species":
+        headers, getters = _move_before(headers, getters, "學名", "中文名")
     return headers, getters
 
 
