@@ -25,6 +25,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
+from .ecological_groups import ECO_GROUP_CHOICES, eco_group_of
 from .external import search_external_links, species_external_links
 from .models import (
     ObservationImage, PublicationStatus, Species, SpeciesImage, Specimen,
@@ -163,34 +164,78 @@ def data_license(request):
 
 
 def _filtered_species(request):
-    """依查詢參數過濾物種，回傳 (queryset, q, group, status)。列表與匯出共用。
+    """依查詢參數過濾物種，回傳 (queryset, filters)。列表與匯出共用。
 
-    簡易版（無 ?view=research）額外排除自動建立（待查證）物種；研究檢視顯示全部。
+    篩選欄位依檢視模式不同（切換機制沿用 ?view=research）：
+    - 簡易版：以「生態分群」(?eco_group=) 篩選（面向觀眾；於 Python 端即時推導）。
+    - 研究檢視：以「目／科／屬」(?order=／family=／genus=) 精確篩選。
+    兩者共用學名／中文名搜尋與保育等級篩選。簡易版另排除自動建立（待查證）物種。
+    filters 為 dict，供頁面回填表單與判斷是否已查詢。
     """
     q = request.GET.get("q", "").strip()
-    group = request.GET.get("taxon_group", "")
     status = request.GET.get("conservation_status", "")
+    is_research = _is_research(request)
 
     # 對外頁面一律只撈「公開」物種（簡易版與研究檢視皆過濾）
     species = Species.objects.published()
     # 簡易版另排除自動建立（待查證）物種；研究檢視顯示全部（公開）物種
-    if not _is_research(request):
+    if not is_research:
         species = species.exclude(is_auto_created=True)
     if q:
         # icontains → 學名/中文名皆不分大小寫
         species = species.filter(
             Q(scientific_name__icontains=q) | Q(common_name__icontains=q)
         )
-    if group:
-        species = species.filter(taxon_group=group)
     if status:
         species = species.filter(conservation_status=status)
-    return species, q, group, status
+
+    filters = {"q": q, "status": status}
+    if is_research:
+        # 研究檢視：目／科／屬精確比對（選項由實際已填的相異值產生）
+        order = request.GET.get("order", "").strip()
+        family = request.GET.get("family", "").strip()
+        genus = request.GET.get("genus", "").strip()
+        if order:
+            species = species.filter(order=order)
+        if family:
+            species = species.filter(family=family)
+        if genus:
+            species = species.filter(genus=genus)
+        filters.update(order=order, family=family, genus=genus)
+    else:
+        # 簡易版：生態分群於 Python 端推導，再以 pk__in 套回 queryset，
+        # 使下游（清單預取、匯出 annotate）仍能操作 queryset。
+        eco_group = request.GET.get("eco_group", "").strip()
+        if eco_group:
+            ids = [s.pk for s in species if eco_group_of(s) == eco_group]
+            species = species.filter(pk__in=ids)
+        filters["eco_group"] = eco_group
+    return species, filters
+
+
+def _research_field_choices():
+    """研究檢視「目／科／屬」下拉的選項：取公開物種中實際已填的相異值。"""
+    pub = Species.objects.published()
+    return {
+        "order_choices": sorted(
+            v for v in pub.values_list("order", flat=True).distinct() if v
+        ),
+        "family_choices": sorted(
+            v for v in pub.values_list("family", flat=True).distinct() if v
+        ),
+        "genus_choices": sorted(
+            v for v in pub.values_list("genus", flat=True).distinct() if v
+        ),
+    }
 
 
 def public_species_list(request):
-    """公開物種查詢頁：搜尋（學名／中文名）＋篩選（分類群／保育等級）。"""
-    species, q, group, status = _filtered_species(request)
+    """公開物種查詢頁：搜尋（學名／中文名）＋篩選。
+
+    簡易版以「生態分群」篩選、研究檢視以「目／科／屬」篩選（見 _filtered_species）。
+    """
+    is_research = _is_research(request)
+    species, filters = _filtered_species(request)
 
     # 只預取「對外公開」的物種影像（後端過濾，未公開影像不進入公開頁），
     # 依 SpeciesImage 的 Meta 排序：主要影像優先，否則最早上傳者在前。
@@ -208,13 +253,13 @@ def public_species_list(request):
         s.thumb_url = _cloudinary_url(primary.image, THUMB_CARD) if primary else ""
 
     total = len(species_list)
+    q = filters["q"]
     context = {
         "species_list": species_list,
         "q": q,
-        "group": group,
-        "status": status,
-        "searched": bool(q or group or status),
-        "taxon_groups": Species.TaxonGroup.choices,
+        "status": filters["status"],
+        # 是否已下任何查詢條件（任一篩選有值即為 True）
+        "searched": any(filters.values()),
         "conservation_choices": Species.ConservationStatus.choices,
         "total": total,
         # 對外沒有任何公開物種（空系統或全為草稿）→ 顯示優雅空狀態
@@ -222,8 +267,16 @@ def public_species_list(request):
         # 有查詢條件卻查無結果時，引導到外部權威資源查詢
         "no_result_links": search_external_links(q) if not total else None,
         # 檢視模式：研究檢視顯示全部並標示待查證；簡易版於頁尾顯示說明
-        "is_research": _is_research(request),
+        "is_research": is_research,
     }
+    if is_research:
+        # 研究檢視：目／科／屬篩選（回填目前值＋動態選項）
+        context.update(filters)  # order / family / genus
+        context.update(_research_field_choices())
+    else:
+        # 簡易版：生態分群篩選
+        context["eco_group"] = filters["eco_group"]
+        context["eco_group_choices"] = ECO_GROUP_CHOICES
     return render(request, "collection/species_list.html", context)
 
 
@@ -233,7 +286,7 @@ def public_species_export(request):
     跟隨同一個 view 參數：簡易版排除自動建立（待查證）物種；研究檢視匯出全部。
     未鑑定標本一律計入館藏標本數。此匯出為物種層級、本就不含精確座標等敏感欄位。
     """
-    species, _q, _group, _status = _filtered_species(request)
+    species, _filters = _filtered_species(request)
     species = species.annotate(n_specimens=Count("specimens"))
 
     columns = [
