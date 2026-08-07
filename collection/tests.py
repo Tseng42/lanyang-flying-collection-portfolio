@@ -806,3 +806,74 @@ class CatalogNumberRelocationTests(TestCase):
             )
         self.assertEqual(CatalogNumberChange.objects.count(), 0)
 
+
+class EcologicalGroupTests(TestCase):
+    """查詢頁「簡易版」生態分群推導與篩選。"""
+
+    @classmethod
+    def setUpTestData(cls):
+        from .ecological_groups import EcoGroup
+        cls.EcoGroup = EcoGroup
+
+        def make(common, sci, order="", **extra):
+            return Species.objects.create(
+                common_name=common, scientific_name=sci,
+                taxon_group=Species.TaxonGroup.BIRD, order=order,
+                conservation_status=Species.ConservationStatus.GENERAL,
+                publication_status=PublicationStatus.PUBLISHED, **extra,
+            )
+
+        # 屬名可直接命中對照表（即使目空白）
+        cls.raptor = make("黑鳶", "Milvus migrans")
+        cls.waterbird = make("小白鷺", "Egretta garzetta")
+        cls.songbird = make("麻雀", "Passer montanus")
+        cls.landfowl = make("珠頸斑鳩", "Spilopelia chinensis")
+        # 燕科：分類屬雀形目（連目都填了），但策展上仍歸「其他（特殊生態）」，
+        # 用以驗證屬名對照表優先於目級判斷。
+        cls.swallow = make("家燕", "Hirundo rustica", order="雀形目")
+        # 屬名未收錄、但有填「目」→ 由目後援歸類
+        cls.by_order = make("某鳴禽", "Zzzunknownus testus", order="雀形目")
+        # 屬名未收錄且目空白 → 落「其他」
+        cls.unmapped = make("未知鳥", "Xxxunknownus ignotus")
+
+    def test_eco_group_of_by_genus(self):
+        from .ecological_groups import eco_group_of
+        self.assertEqual(eco_group_of(self.raptor), self.EcoGroup.RAPTOR)
+        self.assertEqual(eco_group_of(self.waterbird), self.EcoGroup.WATERBIRD)
+        self.assertEqual(eco_group_of(self.songbird), self.EcoGroup.SONGBIRD)
+        self.assertEqual(eco_group_of(self.landfowl), self.EcoGroup.LANDFOWL)
+
+    def test_special_family_overrides_order(self):
+        """燕科屬名優先於目級判斷，維持「其他」。"""
+        from .ecological_groups import eco_group_of
+        self.assertEqual(eco_group_of(self.swallow), self.EcoGroup.OTHER)
+
+    def test_eco_group_falls_back_to_order(self):
+        from .ecological_groups import eco_group_of
+        self.assertEqual(eco_group_of(self.by_order), self.EcoGroup.SONGBIRD)
+
+    def test_unmapped_falls_to_other(self):
+        from .ecological_groups import eco_group_of, is_unmapped
+        self.assertEqual(eco_group_of(self.unmapped), self.EcoGroup.OTHER)
+        self.assertTrue(is_unmapped(self.unmapped))
+        # 燕科雖歸「其他」，但屬名已收錄，不算未對應
+        self.assertFalse(is_unmapped(self.swallow))
+
+    def test_list_filters_by_eco_group(self):
+        """簡易版帶 ?eco_group= 只回該生態分群的物種。"""
+        resp = self.client.get(
+            reverse("public_species_list"), {"eco_group": "raptor"}
+        )
+        self.assertContains(resp, "Milvus migrans")
+        self.assertNotContains(resp, "Egretta garzetta")
+        self.assertNotContains(resp, "Passer montanus")
+
+    def test_research_view_filters_by_order(self):
+        """研究檢視帶 ?order= 精確比對「目」欄位。"""
+        resp = self.client.get(
+            reverse("public_species_list"),
+            {"view": "research", "order": "雀形目"},
+        )
+        self.assertContains(resp, "Zzzunknownus testus")
+        self.assertNotContains(resp, "Milvus migrans")
+
