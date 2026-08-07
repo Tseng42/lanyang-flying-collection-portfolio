@@ -20,6 +20,16 @@ urlpatterns = [
         views.full_export_download,
         name="full_export_download",
     ),
+    path(
+        "darwin-core-export/",
+        views.darwin_core_export_page,
+        name="darwin_core_export",
+    ),
+    path(
+        "darwin-core-export/download.zip",
+        views.darwin_core_export_download,
+        name="darwin_core_export_download",
+    ),
     path("species/", views.public_species_list, name="public_species_list"),
     path(
         "species/export.csv",
