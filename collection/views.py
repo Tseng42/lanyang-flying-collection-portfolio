@@ -440,6 +440,40 @@ def full_export_download(request):
     return response
 
 
+# ---------------------------------------------------------------------------
+# 後台「Darwin Core 匯出」：把公開標本匯成 Darwin Core CSV（ZIP，附授權說明）。
+#
+# 對外標準化子集（可供日後發布至 GBIF／TBIA），與「全欄位匯出」互相獨立、並存。
+# 權限：superuser 或具 collection.can_export_full_data（→ 典藏主管），比照全欄位匯出。
+# 僅輸出「公開」資料；含未公開資料的匯出另以後台標本清單的批次動作提供（需公開權限）。
+# ---------------------------------------------------------------------------
+
+@login_required(login_url="/admin/login/")
+@permission_required("collection.can_export_full_data", raise_exception=True)
+def darwin_core_export_page(request):
+    """Darwin Core 匯出的入口頁：說明 + 一個下載按鈕。"""
+    return render(request, "collection/darwin_core_export.html")
+
+
+@login_required(login_url="/admin/login/")
+@permission_required("collection.can_export_full_data", raise_exception=True)
+def darwin_core_export_download(request):
+    """把全部「公開」標本匯出為 Darwin Core CSV（ZIP，內含授權與來源說明）。"""
+    from .darwin_core import build_darwin_core_zip
+
+    queryset = Specimen.objects.published()
+    data = build_darwin_core_zip(request, queryset)
+    stamp = timezone.localtime().strftime("%Y%m%d-%H%M")
+    filename = f"蘭陽博物館_Darwin_Core_匯出_{stamp}.zip"
+    response = HttpResponse(data, content_type="application/zip")
+    # 中文檔名以 RFC 5987 filename* 提供；另附 ASCII 後備檔名以相容舊瀏覽器
+    response["Content-Disposition"] = (
+        f"attachment; filename=lymuseum_darwincore_{stamp}.zip; "
+        f"filename*=UTF-8''{quote(filename)}"
+    )
+    return response
+
+
 @login_required(login_url="/admin/login/")
 @permission_required("collection.can_restore_database", raise_exception=True)
 def restore_database(request):

@@ -1,0 +1,26 @@
+{% extends "collection/base_public.html" %}
+
+{% block title %}Darwin Core 匯出 · 蘭陽博物館 飛行生物典藏{% endblock %}
+
+{% block content %}
+  <a class="backlink" href="/admin/">← 回後台</a>
+  <h1>Darwin Core 匯出</h1>
+  <p class="lead">
+    下載一份符合 <strong>Darwin Core</strong> 標準的標本紀錄（CSV，打包為 ZIP），
+    可供日後發布至 GBIF／TBIA。<strong>僅包含「公開」資料</strong>——這是對外的標準化子集。</p>
+
+  <div class="panel" style="max-width:620px;">
+    <p style="margin:0 0 16px; font-size:14px; color:var(--muted); line-height:1.9;">
+      欄位對應 Darwin Core（occurrenceID、catalogNumber、scientificName、eventDate…）。<br>
+      occurrenceID 採全球唯一 UUID（urn:uuid 形式）；institutionCode 為 LYM。<br>
+      保育類物種之精確經緯度一律留空，並以 informationWithheld 標示；仍保留縣市層級地點。<br>
+      ZIP 內另附「授權與來源說明.txt」。
+    </p>
+    <a class="btn navy" href="{% url 'darwin_core_export_download' %}"
+       style="display:inline-block;">⬇ 下載 Darwin Core 匯出（.zip）</a>
+    <p class="muted" style="font-size:12px; margin:16px 0 0;">
+      此匯出僅含公開資料。若需含未公開（草稿／待審）資料，請於後台「標本」清單勾選後，
+      使用批次動作「匯出為 Darwin Core CSV（含未公開資料）」（需公開權限）。<br>
+      此功能與館內備份用的「全欄位匯出」為兩個獨立功能。</p>
+  </div>
+{% endblock %}

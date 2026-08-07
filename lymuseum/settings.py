@@ -414,6 +414,16 @@ UNFOLD = {
                             "collection.can_export_full_data"
                         ),
                     },
+                    {
+                        "title": "Darwin Core 匯出",
+                        "icon": "public",
+                        "link": reverse_lazy("darwin_core_export"),
+                        # 對外標準化子集（GBIF／TBIA）；比照全欄位匯出的匯出權限，
+                        # 僅有匯出權限者可見（後端 view 仍會強制檢查）。
+                        "permission": lambda request: request.user.has_perm(
+                            "collection.can_export_full_data"
+                        ),
+                    },
                 ],
             },
             {
