@@ -877,3 +877,53 @@ class EcologicalGroupTests(TestCase):
         self.assertContains(resp, "Zzzunknownus testus")
         self.assertNotContains(resp, "Milvus migrans")
 
+
+class TaxonomyWhitespaceTests(TestCase):
+    """「目／科／屬」自由輸入欄位的空白清理（查詢頁下拉選單重複選項的根因）。"""
+
+    def test_taxonomy_fields_stripped_on_save(self):
+        """一般存檔（含後台）路徑會自動清掉頭尾空白，不會產生看不見的差異。"""
+        sp = Species.objects.create(
+            common_name="測試鳥", scientific_name="Testus stripsus",
+            taxon_group=Species.TaxonGroup.BIRD,
+            conservation_status=Species.ConservationStatus.GENERAL,
+            publication_status=PublicationStatus.PUBLISHED,
+            order="雀形目　", family=" 山雀科", genus="山雀屬\t",
+        )
+        sp.refresh_from_db()
+        self.assertEqual(sp.order, "雀形目")
+        self.assertEqual(sp.family, "山雀科")
+        self.assertEqual(sp.genus, "山雀屬")
+
+    def test_dropdown_merges_whitespace_variants(self):
+        """即使遺留資料帶有頭尾空白的差異，查詢頁下拉選單也只顯示一個選項。
+
+        以 .update() 繞過存檔訊號，模擬從備份 loaddata 還原等會跳過
+        Species.save() 清理邏輯的路徑（見 apps.py 的
+        _normalize_species_taxonomy）。
+        """
+        clean = Species.objects.create(
+            common_name="麻雀", scientific_name="Passer montanus",
+            taxon_group=Species.TaxonGroup.BIRD,
+            conservation_status=Species.ConservationStatus.GENERAL,
+            publication_status=PublicationStatus.PUBLISHED,
+            order="雀形目",
+        )
+        dirty = Species.objects.create(
+            common_name="家燕", scientific_name="Hirundo rustica",
+            taxon_group=Species.TaxonGroup.BIRD,
+            conservation_status=Species.ConservationStatus.GENERAL,
+            publication_status=PublicationStatus.PUBLISHED,
+            order="雀形目",
+        )
+        Species.objects.filter(pk=dirty.pk).update(order="雀形目　")
+        self.assertNotEqual(
+            Species.objects.get(pk=dirty.pk).order,
+            Species.objects.get(pk=clean.pk).order,
+        )
+
+        resp = self.client.get(
+            reverse("public_species_list"), {"view": "research"}
+        )
+        self.assertEqual(resp.context["order_choices"].count("雀形目"), 1)
+

@@ -213,19 +213,26 @@ def _filtered_species(request):
     return species, filters
 
 
+def _distinct_stripped(queryset, field):
+    """取某欄位「去頭尾空白後」的相異值，由小到大排序。
+
+    `Species.order/family/genus` 是自由輸入欄位；資料庫層級的 `.distinct()`
+    是逐位元組比對，只要有一筆資料頭尾多了看不見的空白（例如手動輸入、
+    或從備份 loaddata 還原帶進未經表單清理的舊值），畫面上看起來相同的
+    選項就會被列成好幾筆「不同」選項。這裡在 Python 端先 strip 再去重，
+    確保下拉選單一律顯示合併後的結果；資料本身的清理另見對應的資料遷移。
+    """
+    values = {v.strip() for v in queryset.values_list(field, flat=True) if v and v.strip()}
+    return sorted(values)
+
+
 def _research_field_choices():
     """研究檢視「目／科／屬」下拉的選項：取公開物種中實際已填的相異值。"""
     pub = Species.objects.published()
     return {
-        "order_choices": sorted(
-            v for v in pub.values_list("order", flat=True).distinct() if v
-        ),
-        "family_choices": sorted(
-            v for v in pub.values_list("family", flat=True).distinct() if v
-        ),
-        "genus_choices": sorted(
-            v for v in pub.values_list("genus", flat=True).distinct() if v
-        ),
+        "order_choices": _distinct_stripped(pub, "order"),
+        "family_choices": _distinct_stripped(pub, "family"),
+        "genus_choices": _distinct_stripped(pub, "genus"),
     }
 
 
