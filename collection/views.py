@@ -25,7 +25,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from .ecological_groups import ECO_GROUP_CHOICES, eco_group_of
+from .habitat_groups import HABITAT_GROUP_CHOICES, habitat_group_of
 from .external import search_external_links, species_external_links
 from .models import (
     ObservationImage, PublicationStatus, Species, SpeciesImage, Specimen,
@@ -167,7 +167,7 @@ def _filtered_species(request):
     """依查詢參數過濾物種，回傳 (queryset, filters)。列表與匯出共用。
 
     篩選欄位依檢視模式不同（切換機制沿用 ?view=research）：
-    - 簡易版：以「生態分群」(?eco_group=) 篩選（面向觀眾；於 Python 端即時推導）。
+    - 簡易版：以「棲息環境」(?habitat=) 篩選（面向觀眾；於 Python 端即時推導）。
     - 研究檢視：以「目／科／屬」(?order=／family=／genus=) 精確篩選。
     兩者共用學名／中文名搜尋與保育等級篩選。簡易版另排除自動建立（待查證）物種。
     filters 為 dict，供頁面回填表單與判斷是否已查詢。
@@ -203,13 +203,13 @@ def _filtered_species(request):
             species = species.filter(genus=genus)
         filters.update(order=order, family=family, genus=genus)
     else:
-        # 簡易版：生態分群於 Python 端推導，再以 pk__in 套回 queryset，
+        # 簡易版：棲域分群於 Python 端推導，再以 pk__in 套回 queryset，
         # 使下游（清單預取、匯出 annotate）仍能操作 queryset。
-        eco_group = request.GET.get("eco_group", "").strip()
-        if eco_group:
-            ids = [s.pk for s in species if eco_group_of(s) == eco_group]
+        habitat = request.GET.get("habitat", "").strip()
+        if habitat:
+            ids = [s.pk for s in species if habitat_group_of(s) == habitat]
             species = species.filter(pk__in=ids)
-        filters["eco_group"] = eco_group
+        filters["habitat"] = habitat
     return species, filters
 
 
@@ -239,7 +239,7 @@ def _research_field_choices():
 def public_species_list(request):
     """公開物種查詢頁：搜尋（學名／中文名）＋篩選。
 
-    簡易版以「生態分群」篩選、研究檢視以「目／科／屬」篩選（見 _filtered_species）。
+    簡易版以「棲息環境」篩選、研究檢視以「目／科／屬」篩選（見 _filtered_species）。
     """
     is_research = _is_research(request)
     species, filters = _filtered_species(request)
@@ -281,9 +281,9 @@ def public_species_list(request):
         context.update(filters)  # order / family / genus
         context.update(_research_field_choices())
     else:
-        # 簡易版：生態分群篩選
-        context["eco_group"] = filters["eco_group"]
-        context["eco_group_choices"] = ECO_GROUP_CHOICES
+        # 簡易版：棲息環境篩選
+        context["habitat"] = filters["habitat"]
+        context["habitat_choices"] = HABITAT_GROUP_CHOICES
     return render(request, "collection/species_list.html", context)
 
 

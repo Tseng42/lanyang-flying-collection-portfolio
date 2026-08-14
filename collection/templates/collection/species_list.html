@@ -7,7 +7,7 @@
   <h1>查詢典藏</h1>
   <p class="lead">
     {% if is_research %}可依學名或中文名搜尋，並以目、科、屬、保育等級篩選。
-    {% else %}可依學名或中文名搜尋，並以生態分群、保育等級篩選。{% endif %}</p>
+    {% else %}可依學名或中文名搜尋，並以棲息環境、保育等級篩選。{% endif %}</p>
 
   <div class="panel">
     <form class="search-form" method="get">
@@ -47,13 +47,13 @@
           </select>
         </div>
       {% else %}
-        {# 簡易版：生態分群 #}
+        {# 簡易版：棲息環境（水域／陸域／其他）#}
         <div class="field">
-          <label for="id_eco_group">生態分群</label>
-          <select id="id_eco_group" name="eco_group">
+          <label for="id_habitat">棲息環境</label>
+          <select id="id_habitat" name="habitat">
             <option value="">全部</option>
-            {% for value, label in eco_group_choices %}
-              <option value="{{ value }}" {% if value == eco_group %}selected{% endif %}>{{ label }}</option>
+            {% for value, label in habitat_choices %}
+              <option value="{{ value }}" {% if value == habitat %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
           </select>
         </div>

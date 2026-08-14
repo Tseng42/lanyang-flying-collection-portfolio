@@ -807,74 +807,108 @@ class CatalogNumberRelocationTests(TestCase):
         self.assertEqual(CatalogNumberChange.objects.count(), 0)
 
 
-class EcologicalGroupTests(TestCase):
-    """查詢頁「簡易版」生態分群推導與篩選。"""
+class HabitatGroupTests(TestCase):
+    """查詢頁「簡易版」棲域分群（水域／陸域／其他）推導與篩選。"""
 
     @classmethod
     def setUpTestData(cls):
-        from .ecological_groups import EcoGroup
-        cls.EcoGroup = EcoGroup
+        from .habitat_groups import HabitatGroup
+        cls.HabitatGroup = HabitatGroup
 
-        def make(common, sci, order="", **extra):
+        def make(common, sci, order="", group=Species.TaxonGroup.BIRD, **extra):
             return Species.objects.create(
                 common_name=common, scientific_name=sci,
-                taxon_group=Species.TaxonGroup.BIRD, order=order,
+                taxon_group=group, order=order,
                 conservation_status=Species.ConservationStatus.GENERAL,
                 publication_status=PublicationStatus.PUBLISHED, **extra,
             )
 
-        # 屬名可直接命中對照表（即使目空白）
+        # 屬名可直接命中水域表（即使「目」空白）
+        cls.egret = make("小白鷺", "Egretta garzetta")
+        # 翠鳥科：所屬的佛法僧目整體非水域，只能靠屬名判為水域
+        cls.kingfisher = make("翠鳥", "Alcedo atthis", order="佛法僧目")
+        # 未命中水域表 → 預設陸域（猛禽、鳴禽、鳩鴿一律如此）
         cls.raptor = make("黑鳶", "Milvus migrans")
-        cls.waterbird = make("小白鷺", "Egretta garzetta")
-        cls.songbird = make("麻雀", "Passer montanus")
-        cls.landfowl = make("珠頸斑鳩", "Spilopelia chinensis")
-        # 燕科：分類屬雀形目（連目都填了），但策展上仍歸「其他（特殊生態）」，
-        # 用以驗證屬名對照表優先於目級判斷。
+        cls.sparrow = make("麻雀", "Passer montanus", order="雀形目")
+        # 燕科：常於水面上空捕食，但依規則落預設陸域
         cls.swallow = make("家燕", "Hirundo rustica", order="雀形目")
-        # 屬名未收錄、但有填「目」→ 由目後援歸類
-        cls.by_order = make("某鳴禽", "Zzzunknownus testus", order="雀形目")
-        # 屬名未收錄且目空白 → 落「其他」
-        cls.unmapped = make("未知鳥", "Xxxunknownus ignotus")
+        # 陸域例外：科屬為鷺科／鵜形目（水域目），但實際為林下型 → 陸域
+        cls.night_heron = make("黑冠麻鷺", "Gorsachius melanolophus", order="鵜形目")
+        # 屬名未收錄、但「目」為水域目 → 由目後援判為水域
+        cls.by_order = make("某水鳥", "Zzzunknownus testus", order="鴴形目")
+        # 屬名未收錄且「目」空白 → 落預設陸域，且屬待人工複核
+        cls.unverified = make("未知鳥", "Xxxunknownus ignotus")
+        # 非鳥類（館藏中的蛇與哺乳類）→ 一律「其他」，不參與水陸判定
+        cls.snake = make("草花蛇", "Xenochrophis piscator",
+                         group=Species.TaxonGroup.OTHER)
 
-    def test_eco_group_of_by_genus(self):
-        from .ecological_groups import eco_group_of
-        self.assertEqual(eco_group_of(self.raptor), self.EcoGroup.RAPTOR)
-        self.assertEqual(eco_group_of(self.waterbird), self.EcoGroup.WATERBIRD)
-        self.assertEqual(eco_group_of(self.songbird), self.EcoGroup.SONGBIRD)
-        self.assertEqual(eco_group_of(self.landfowl), self.EcoGroup.LANDFOWL)
+    def test_aquatic_by_genus(self):
+        from .habitat_groups import habitat_group_of
+        self.assertEqual(habitat_group_of(self.egret), self.HabitatGroup.AQUATIC)
+        self.assertEqual(habitat_group_of(self.kingfisher), self.HabitatGroup.AQUATIC)
 
-    def test_special_family_overrides_order(self):
-        """燕科屬名優先於目級判斷，維持「其他」。"""
-        from .ecological_groups import eco_group_of
-        self.assertEqual(eco_group_of(self.swallow), self.EcoGroup.OTHER)
+    def test_defaults_to_terrestrial(self):
+        """未命中水域表者一律陸域——猛禽、鳴禽、燕科皆然。"""
+        from .habitat_groups import habitat_group_of
+        for sp in (self.raptor, self.sparrow, self.swallow):
+            self.assertEqual(
+                habitat_group_of(sp), self.HabitatGroup.TERRESTRIAL, sp.common_name,
+            )
 
-    def test_eco_group_falls_back_to_order(self):
-        from .ecological_groups import eco_group_of
-        self.assertEqual(eco_group_of(self.by_order), self.EcoGroup.SONGBIRD)
-
-    def test_unmapped_falls_to_other(self):
-        from .ecological_groups import eco_group_of, is_unmapped
-        self.assertEqual(eco_group_of(self.unmapped), self.EcoGroup.OTHER)
-        self.assertTrue(is_unmapped(self.unmapped))
-        # 燕科雖歸「其他」，但屬名已收錄，不算未對應
-        self.assertFalse(is_unmapped(self.swallow))
-
-    def test_list_filters_by_eco_group(self):
-        """簡易版帶 ?eco_group= 只回該生態分群的物種。"""
-        resp = self.client.get(
-            reverse("public_species_list"), {"eco_group": "raptor"}
+    def test_terrestrial_exception_overrides_aquatic_order(self):
+        """黑冠麻鷺雖屬鵜形目，仍由陸域例外表判為陸域。"""
+        from .habitat_groups import habitat_group_of
+        self.assertEqual(
+            habitat_group_of(self.night_heron), self.HabitatGroup.TERRESTRIAL
         )
-        self.assertContains(resp, "Milvus migrans")
+
+    def test_falls_back_to_order(self):
+        from .habitat_groups import habitat_group_of
+        self.assertEqual(habitat_group_of(self.by_order), self.HabitatGroup.AQUATIC)
+
+    def test_non_bird_goes_to_other(self):
+        """非鳥類不適用水陸分類，一律「其他」。"""
+        from .habitat_groups import habitat_group_of, is_unverified
+        self.assertEqual(habitat_group_of(self.snake), self.HabitatGroup.OTHER)
+        self.assertFalse(is_unverified(self.snake))
+
+    def test_is_unverified_only_when_genus_and_order_both_unknown(self):
+        from .habitat_groups import habitat_group_of, is_unverified
+        # 屬名未收錄且「目」空白 → 落預設陸域，需人工複核
+        self.assertEqual(
+            habitat_group_of(self.unverified), self.HabitatGroup.TERRESTRIAL
+        )
+        self.assertTrue(is_unverified(self.unverified))
+        # 「目」已填（雀形目）即可確定為陸域，不算未判定
+        self.assertFalse(is_unverified(self.sparrow))
+        # 屬名已收錄者亦然
+        self.assertFalse(is_unverified(self.egret))
+
+    def test_list_filters_by_habitat(self):
+        """簡易版帶 ?habitat= 只回該棲域的物種。"""
+        resp = self.client.get(
+            reverse("public_species_list"), {"habitat": "aquatic"}
+        )
+        self.assertContains(resp, "Egretta garzetta")
+        self.assertNotContains(resp, "Milvus migrans")
+        self.assertNotContains(resp, "Xenochrophis piscator")
+
+    def test_list_filters_by_other_returns_non_birds(self):
+        """「其他」只回非鳥類。"""
+        resp = self.client.get(
+            reverse("public_species_list"), {"habitat": "other"}
+        )
+        self.assertContains(resp, "Xenochrophis piscator")
         self.assertNotContains(resp, "Egretta garzetta")
-        self.assertNotContains(resp, "Passer montanus")
+        self.assertNotContains(resp, "Milvus migrans")
 
     def test_research_view_filters_by_order(self):
-        """研究檢視帶 ?order= 精確比對「目」欄位。"""
+        """研究檢視帶 ?order= 精確比對「目」欄位（與棲域推導無關）。"""
         resp = self.client.get(
             reverse("public_species_list"),
             {"view": "research", "order": "雀形目"},
         )
-        self.assertContains(resp, "Zzzunknownus testus")
+        self.assertContains(resp, "Passer montanus")
         self.assertNotContains(resp, "Milvus migrans")
 
 
